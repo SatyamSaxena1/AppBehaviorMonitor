@@ -127,7 +127,7 @@ exit 0
     (output/'Packages').write_bytes(data)
     (output/'Packages.gz').write_bytes(gzip.compress(data, mtime=0))
     lines=['Origin: Satyam Saxena', 'Label: Privacy Monitor Beta', 'Icon: '+URL+'CydiaIcon.png', 'Suite: stable', 'Version: 1.0',
-           'Codename: privacy-monitor', 'Architectures: iphoneos-arm64',
+           'Codename: privacy-monitor', 'Architectures: iphoneos-arm64', 'Components: main',
            'Description: Privacy Monitor for Dopamine rootless iOS 15. Public beta.',
            'Date: '+email.utils.format_datetime(datetime.datetime.now(datetime.timezone.utc),usegmt=True)]
     for key,algorithm in [('MD5Sum','md5'),('SHA256','sha256'),('SHA512','sha512')]:
@@ -152,6 +152,9 @@ exit 0
     validate(output)
 
 def validate(output):
+    release_fields = dict(line.split(':', 1) for line in (output/'Release').read_text().splitlines() if line and not line.startswith(' '))
+    assert release_fields.get('Components', '').strip(), 'Sileo requires Components in Release'
+    assert 'iphoneos-arm64' in release_fields.get('Architectures', '').split(), 'Missing rootless architecture'
     paragraphs=(output/'Packages').read_text().strip().split('\n\n')
     found=set()
     for entry in paragraphs:

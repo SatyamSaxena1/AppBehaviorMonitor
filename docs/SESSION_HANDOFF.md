@@ -149,3 +149,8 @@ GitHub Actions and Pages report operational. Pages deployment for website commit
 ## Source-list icon fix
 
 User reported a missing source icon in Sileo. The repository had package-level Icon fields and icon.png but no conventional CydiaIcon.png assets. Added CydiaIcon.png, CydiaIcon@2x.png, and CydiaIcon@3x.png using the existing shield PNG, and an explicit Icon field in Release. Updated distribution/build_repo.py to preserve these assets and metadata on rebuilds. Package binaries and indexes are unchanged. Publish both website assets and generator/handoff; verify the public icons before asking the user to refresh Sileo.
+
+
+## Sileo Release parsing fix
+
+User reported a source refresh failure. Checked the actual Sileo RepoManager.swift parser: after architecture validation it explicitly requires a components key, even for flat repositories. Our Release omitted it. Added `Components: main` to the live repository and generator; validate() now requires nonempty Components and iphoneos-arm64. Revalidated package paths, versions, checksums, gzip index and maintainer scripts without rebuilding/changing debs. A separate MinhTon source error is unrelated: its Release advertises only iphoneos-arm, incompatible with this rootless device. No foreign source was edited or removed.
