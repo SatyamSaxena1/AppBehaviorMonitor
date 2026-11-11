@@ -144,3 +144,8 @@ Static validation passed for both pages: local links, duplicate IDs, a single h1
 ## Live deployment verified after GitHub recovery
 
 GitHub Actions and Pages report operational. Pages deployment for website commit `bbf9820` completed successfully, as did the website Tests workflow. Public Release, Packages, Packages.gz, manifest, and all three deb downloads were verified; package sizes and SHA-256 hashes match manifest.json. The live project page and homepage timeline were also checked. Sileo source is now ready: https://satyamsaxena1.github.io/repo/ . Actual fresh-device installation remains beta testing; successful hosting is not a clean-install claim.
+
+
+## Source-list icon fix
+
+User reported a missing source icon in Sileo. The repository had package-level Icon fields and icon.png but no conventional CydiaIcon.png assets. Added CydiaIcon.png, CydiaIcon@2x.png, and CydiaIcon@3x.png using the existing shield PNG, and an explicit Icon field in Release. Updated distribution/build_repo.py to preserve these assets and metadata on rebuilds. Package binaries and indexes are unchanged. Publish both website assets and generator/handoff; verify the public icons before asking the user to refresh Sileo.

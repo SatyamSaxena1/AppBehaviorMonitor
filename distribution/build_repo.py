@@ -113,6 +113,8 @@ exit 0
                             'python3 (>= 3.9) | xyz.cypwn.python314 (>= 3.14)', debs)
 
     shutil.copy2(native/'var/jb/Applications/PrivacyMonitor.app/AppIcon60x60@3x.png', output/'icon.png')
+    for name in ['CydiaIcon.png', 'CydiaIcon@2x.png', 'CydiaIcon@3x.png']:
+        shutil.copy2(output/'icon.png', output/name)
     entries=[]
     assets=[]
     for file in [native_deb, engine_deb, collector_deb]:
@@ -124,7 +126,7 @@ exit 0
     data=('\n'.join(entries)+'\n').encode()
     (output/'Packages').write_bytes(data)
     (output/'Packages.gz').write_bytes(gzip.compress(data, mtime=0))
-    lines=['Origin: Satyam Saxena', 'Label: Privacy Monitor Beta', 'Suite: stable', 'Version: 1.0',
+    lines=['Origin: Satyam Saxena', 'Label: Privacy Monitor Beta', 'Icon: '+URL+'CydiaIcon.png', 'Suite: stable', 'Version: 1.0',
            'Codename: privacy-monitor', 'Architectures: iphoneos-arm64',
            'Description: Privacy Monitor for Dopamine rootless iOS 15. Public beta.',
            'Date: '+email.utils.format_datetime(datetime.datetime.now(datetime.timezone.utc),usegmt=True)]
