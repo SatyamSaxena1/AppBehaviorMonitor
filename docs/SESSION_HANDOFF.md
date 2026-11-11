@@ -93,3 +93,5 @@ Still pending:
 - LaunchDaemon auto-start configuration is verified, but survival across an actual respring/reboot was not tested.
 
 Repository checkpoint includes the newer working tweak and Python sources, regression tests, and portable handoff documentation. Build output is reproducible and is not committed.
+
+GitHub backup confirmed: commit `29cbdf7` pushed to `origin/master`, including source, tests, and handoff notes. Git's configured shell-based gh credential helper cannot execute on this device. Push succeeded using a temporary Python GIT_ASKPASS executable that obtained the existing gh token in memory; no token was written to the repository or printed. Future pushes may need the same workaround until the device's Git shell/helper configuration is repaired.
