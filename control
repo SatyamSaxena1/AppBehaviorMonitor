@@ -1,0 +1,9 @@
+Package: com.appmon.tweak
+Name: AppBehaviorMonitor
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: System-wide app behavior monitor — logs network, file, keychain, clipboard, location, camera/mic, and tracking events.
+Maintainer: appmon
+Author: appmon
+Section: Tweaks
+Depends: mobilesubstrate
