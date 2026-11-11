@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import "MCPSetupController.h"
+#import "InsightsUI.h"
 
 static NSDictionary *Categories(void) {
     return @{@"network": @[@"Internet", @"network"], @"file": @[@"Files", @"folder"],
@@ -195,34 +196,46 @@ static NSString *Age(id timestamp) {
 }
 @end
 
+UIViewController *PMActivityScreen(BOOL apps) {
+    MonitorController *screen = [[MonitorController alloc] initWithStyle:UITableViewStyleInsetGrouped];
+    screen.apps = apps;
+    return screen;
+}
+
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 @property (nonatomic, strong) UIWindow *window;
 @end
 @implementation AppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
-    UITabBarController *tabs = [UITabBarController new];
-    NSMutableArray *controllers = [NSMutableArray new];
-    NSArray *titles = @[@"Apps", @"Activity", @"Connect AI", @"Setup"];
-    NSArray *symbols = @[@"square.grid.2x2.fill", @"waveform.path.ecg", @"link", @"gearshape.fill"];
-    for (NSInteger i=0; i<4; i++) {
-        UIViewController *vc;
-        if (i == 2) vc = [[MCPSetupController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-        else {
-            MonitorController *monitor = [[MonitorController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-            monitor.apps = i == 0; monitor.help = i == 3;
-            vc = monitor;
-        }
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-        nav.navigationBar.prefersLargeTitles = YES;
-        nav.tabBarItem = [[UITabBarItem alloc] initWithTitle:titles[i] image:[UIImage systemImageNamed:symbols[i]] tag:i];
-        [controllers addObject:nav];
-    }
-    tabs.viewControllers = controllers;
-    tabs.view.tintColor = UIColor.systemTealColor;
-    self.window.rootViewController = tabs;
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(developerChanged) name:@"PMDeveloperModeChanged" object:nil];
+    [self configureTabs:NO];
     [self.window makeKeyAndVisible];
     return YES;
+}
+- (void)developerChanged { [self configureTabs:YES]; }
+- (void)configureTabs:(BOOL)settings {
+    BOOL developer = [NSUserDefaults.standardUserDefaults boolForKey:@"PMDeveloperMode"];
+    NSMutableArray *screens = [NSMutableArray arrayWithArray:@[[PMHomeController new], [PMInsightsController new]]];
+    NSMutableArray *titles = [NSMutableArray arrayWithArray:@[@"Overview", @"Insights"]];
+    NSMutableArray *icons = [NSMutableArray arrayWithArray:@[@"house.fill", @"sparkles"]];
+    if (developer) {
+        [screens addObject:[[PMDeveloperController alloc] initWithStyle:UITableViewStyleInsetGrouped]];
+        [titles addObject:@"Developer"]; [icons addObject:@"wrench.and.screwdriver"];
+    }
+    [screens addObject:[[PMSettingsController alloc] initWithStyle:UITableViewStyleInsetGrouped]];
+    [titles addObject:@"Settings"]; [icons addObject:@"gearshape.fill"];
+    NSMutableArray *navigation = [NSMutableArray new];
+    for (NSUInteger i=0;i<screens.count;i++) {
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:screens[i]];
+        nav.navigationBar.prefersLargeTitles = YES;
+        nav.tabBarItem = [[UITabBarItem alloc] initWithTitle:titles[i] image:[UIImage systemImageNamed:icons[i]] tag:i];
+        [navigation addObject:nav];
+    }
+    UITabBarController *tabs = [UITabBarController new]; tabs.viewControllers = navigation;
+    tabs.view.tintColor = UIColor.systemOrangeColor;
+    if (settings) tabs.selectedIndex = navigation.count-1;
+    self.window.rootViewController = tabs;
 }
 @end
 int main(int argc, char *argv[]) {

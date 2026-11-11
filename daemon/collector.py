@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from insight_store import initialize as initialize_insights
 
 DATA_DIR = Path(os.environ.get("APPMON_DATA_DIR", "/var/jb/var/mobile/Documents/appmon"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,6 +68,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             PRIMARY KEY (app_id, category, hour)
         );
     """)
+    initialize_insights(conn)
     conn.commit()
     # Migrate: add display_name column if missing
     cols = [r[1] for r in conn.execute("PRAGMA table_info(events)").fetchall()]
@@ -167,6 +169,7 @@ class Collector:
         cutoff = time.time() - RETENTION_DAYS * 86400
         with self.db_lock:
             try:
+                self.db.execute("DELETE FROM ai_insights WHERE created_at < ?", (cutoff,))
                 cur = self.db.execute("DELETE FROM events WHERE timestamp < ?", (cutoff,))
                 deleted = cur.rowcount
                 cutoff_hour = time.strftime("%Y-%m-%d-%H", time.gmtime(cutoff))

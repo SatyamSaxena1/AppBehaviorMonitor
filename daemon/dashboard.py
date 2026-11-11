@@ -5,6 +5,7 @@ Human-friendly privacy monitor UI.
 """
 
 import html
+from insight_store import list_insights
 from pathlib import Path
 import json
 import re
@@ -324,6 +325,10 @@ class DashboardServer:
                         self.wfile.write(data)
                     elif path == "/help":
                         self._serve_help()
+                    elif path == "/api/insights":
+                        with db_lock:
+                            insights = list_insights(db)
+                        self._json_resp({"insights": insights})
                     elif path == "/api/health":
                         self._json_resp(self._health())
                     elif path == "/live":

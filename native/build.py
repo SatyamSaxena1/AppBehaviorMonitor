@@ -14,7 +14,7 @@ env = dict(os.environ, PATH='/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin', LC_ALL=
 subprocess.run(['/var/jb/usr/bin/clang', '-isysroot', str(sdk), '-target', 'arm64-apple-ios15.0',
                 '-fobjc-arc', '-fmodules', '-Wall', '-Wextra', '-Wno-unused-parameter',
                 '-framework', 'UIKit', '-framework', 'Foundation',
-                str(root / 'main.m'), str(root / 'MCPSetupController.m'), '-o', str(app / 'PrivacyMonitor')], check=True, env=env)
+                str(root / 'main.m'), str(root / 'MCPSetupController.m'), str(root / 'InsightsUI.m'), '-o', str(app / 'PrivacyMonitor')], check=True, env=env)
 subprocess.run(['/var/jb/usr/bin/ldid', '-S', str(app / 'PrivacyMonitor')], check=True, env=env)
 info = dict(CFBundleIdentifier='com.appmon.native', CFBundleName='Privacy Monitor',
             CFBundleDisplayName='Privacy Monitor', CFBundleExecutable='PrivacyMonitor',
@@ -25,6 +25,7 @@ info = dict(CFBundleIdentifier='com.appmon.native', CFBundleName='Privacy Monito
             NSAppTransportSecurity=dict(NSAllowsArbitraryLoads=True),
             CFBundleIcons=dict(CFBundlePrimaryIcon=dict(CFBundleIconFiles=['AppIcon60x60'], UIPrerenderedIcon=True)))
 (app / 'Info.plist').write_bytes(plistlib.dumps(info))
+shutil.copy2(root.parent/'assets/privacy-monitor-icon.png', app/'PrivacyArtwork.png')
 # Generate a local shield icon with no image dependencies.
 def inside(x, y, poly):
     result = False

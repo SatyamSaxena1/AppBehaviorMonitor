@@ -37,7 +37,14 @@ with tempfile.TemporaryDirectory(prefix='appmon-test-',dir='/var/jb/tmp') as tem
         result=json.loads(output.stdout)['result']
         assert not result['isError']
         assert 'example.test' in result['content'][0]['text']
-        print('Packaged collector: empty startup, socket ingestion, named events, HTTP health, and MCP query passed.')
+        review=dict(analysis_id='package-smoke',title='A supported request was observed',summary='One fixture event was recorded.',observations=['The test app made a network request.'],interpretation='This verifies collection, not app safety.',recommendations=['Use real evidence when reviewing apps.'],limitations='Synthetic test only.',confidence='high',priority='context',author='Test harness',evidence_ids=[events[0]['id']],hours=24)
+        call=dict(jsonrpc='2.0',id=2,method='tools/call',params=dict(name='publish_insight',arguments=review))
+        saved=subprocess.run([sys.executable,str(mcp),'--db',str(Path(temp)/'appmon.db')],input=json.dumps(call)+'\n',capture_output=True,text=True,check=True)
+        assert not json.loads(saved.stdout)['result']['isError'],saved.stdout
+        insights=get('/api/insights')['insights']
+        assert len(insights)==1 and insights[0]['evidence'][0]['domain']=='example.test'
+        assert insights[0]['observations']==review['observations']
+        print('Packaged collector: startup, ingestion, HTTP, MCP read/write, and insight read-back passed.')
     finally:
         process.terminate()
         out,err=process.communicate(timeout=10)

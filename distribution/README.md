@@ -7,7 +7,7 @@ Host: `https://satyamsaxena1.github.io/repo/`, from the `repo/` directory of
 
 - `com.appmon.native`: native app; depends on engine and collector.
 - `com.appmon.tweak`: signed rootless engine; depends on collector and MobileSubstrate.
-- `com.appmon.collector`: Python sources, rootless launch wrapper, LaunchDaemon, and optional read-only MCP stdio server. Depends on Procursus Python 3.9+ or the existing CyPwn Python 3.14 package.
+- `com.appmon.collector`: Python sources, rootless launch wrapper, LaunchDaemon, and optional metadata-and-insight MCP stdio server. Depends on Procursus Python 3.9+ or the existing CyPwn Python 3.14 package.
 
 Collector installation registers a mobile-user service under the existing
 `com.appmon.collector` label, replacing a manually installed service on upgrades.

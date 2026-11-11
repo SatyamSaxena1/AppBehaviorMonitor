@@ -1,8 +1,8 @@
 # Privacy Monitor AI connector
 
-A local, read-only MCP server for Claude/Codex-compatible stdio clients.
-Tools: `activity_summary`, `recent_activity`, and `contacted_domains`.
-No arbitrary SQL, shell commands, settings changes, or automatic uploads.
+A local, metadata-and-insight MCP server for Claude/Codex-compatible stdio clients.
+Read tools: `activity_summary`, `recent_activity`, `contacted_domains`, and `list_insights`. `publish_insight` saves requested AI analysis locally, with real event IDs, a review window, confidence, limitations, and recommended next steps.
+No arbitrary SQL, shell commands, monitoring-settings changes, or automatic uploads. Only publish_insight writes, and only to the saved-review table when requested.
 Time windows are bounded to seven days and results are capped. Clipboard contents,
 raw file paths, complete URLs, query strings, and credential details are omitted.
 When an AI client calls tools, returned metadata enters that client's conversation
@@ -61,3 +61,5 @@ validation, missing-database behavior, and metadata redaction. The packaged coll
 smoke test also ingests a synthetic event and queries its domain over stdio.
 
 Launch through the explicit /var/jb/bin/sh interpreter; direct exec of a new shell script was rejected by iOS on the development device. Tool discovery through the explicit interpreter was verified.
+
+Saved reviews appear in the app’s AI Insights tab. Publish validates evidence exists and matches the window/app; it rejects duplicate IDs with changed content. It never modifies recorded events or monitoring settings. Reviews and their limited metadata evidence snapshots are retained for seven days after creation. Author is a client-provided label, not authenticated identity.

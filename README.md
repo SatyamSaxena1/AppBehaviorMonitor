@@ -104,6 +104,6 @@ Install **Privacy Monitor** from Sileo/Zebra to resolve the native app, engine,
 collector service, and Python dependency. See [distribution notes](distribution/README.md)
 for reproducible builds, compatibility limits, and release validation.
 
-An optional [read-only MCP connector](privacy-monitor-ai/README.md) lets a connected
+An optional [metadata-and-insight MCP connector](privacy-monitor-ai/README.md) lets a connected
 Claude/Codex client query activity summaries, recent metadata, and contacted domains.
 It omits raw clipboard/path/URL/credential details and never uploads activity by itself.

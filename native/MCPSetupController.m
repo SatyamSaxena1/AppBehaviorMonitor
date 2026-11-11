@@ -25,10 +25,10 @@ static NSString *const Launcher = @"/var/jb/usr/libexec/privacy-monitor/launch-m
 - (BOOL)textFieldShouldReturn:(UITextField *)field { [field resignFirstResponder]; return YES; }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 6; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return section == 1 || section == 2 ? 3 : section == 4 ? 3 : 1;
+    return section == 1 || section == 2 ? 3 : section == 4 ? 5 : 1;
 }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return @[@"Read-only AI connection", @"AI client on this iPhone", @"AI client on your computer", @"What you share", @"Available tools", @"More help"][section];
+    return @[@"AI analysis connection", @"AI client on this iPhone", @"AI client on your computer", @"What you share", @"Available tools", @"More help"][section];
 }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 1) return @"Run the copied command in your on-device Claude Code or Codex CLI. The JSON option is for stdio clients running on this iPhone. Start a new AI session afterward.";
@@ -66,10 +66,10 @@ static NSString *const Launcher = @"/var/jb/usr/libexec/privacy-monitor/launch-m
             cell.selectionStyle = UITableViewCellSelectionStyleDefault;
         }
     } else if (section == 3) {
-        cell.textLabel.text = @"Tool results enter your AI conversation. The connector omits clipboard contents, raw file paths, full URLs, and credential details. It exposes no shell commands or settings changes. Counts and domain names are observations, not a verdict that an app is malicious.";
+        cell.textLabel.text = @"Tool results enter your AI conversation. The connector omits clipboard contents, raw file paths, full URLs, and credential details. A connected assistant can save requested findings into the Insights tab. It exposes no shell commands or settings changes. Counts and domain names are observations, not a verdict that an app is malicious.";
     } else if (section == 4) {
-        cell.textLabel.text = @[@"activity_summary", @"recent_activity", @"contacted_domains"][row];
-        cell.detailTextLabel.text = @[@"Counts by app and category, over a bounded time window.", @"Recent event metadata without raw details.", @"Domain observations from a bounded network-event sample."][row];
+        cell.textLabel.text = @[@"activity_summary", @"recent_activity", @"contacted_domains", @"publish_insight", @"list_insights"][row];
+        cell.detailTextLabel.text = @[@"Counts by app and category, over a bounded time window.", @"Recent event metadata without raw details.", @"Domain observations from a bounded network-event sample.", @"Save requested AI analysis locally, with recorded evidence. Does not change monitoring settings.", @"Read saved analyses from the last seven days."][row];
     } else {
         cell.textLabel.text = @"Open setup guide";
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;

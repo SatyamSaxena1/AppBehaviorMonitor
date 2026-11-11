@@ -118,7 +118,7 @@ class MonitorTests(unittest.TestCase):
         self.assertIn('0 results', self.get('/search?q=no-such-value'))
 
     def test_routes_filters_and_live_name_propagation(self):
-        for path in ('/app/test.planner?cat=network', '/category/network', '/api/stats', '/live'):
+        for path in ('/app/test.planner?cat=network', '/category/network', '/api/stats', '/api/insights', '/live'):
             self.get(path)
         events = json.loads(self.get('/api/events?cat=network&app=test.planner'))
         self.assertEqual(len(events), 3)

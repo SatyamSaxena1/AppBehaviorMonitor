@@ -1,31 +1,42 @@
-# Privacy Monitor — native jailbreak companion
+# Privacy Monitor — Insights-first jailbreak app
 
-A UIKit application for the existing AppBehaviorMonitor collector. Apps, Activity, and Setup tabs use native navigation, large titles, system dark/light colors, Dynamic Type, SF Symbols, search, and pull-to-refresh. Activity shows the latest 200 events; app selection opens that app's timeline. An event opens its recorded details. Refreshes run every five seconds while visible and stop in the background. Failed requests retain the previous list and show collector unavailability.
+Release 1.1 opens on Overview, AI Insights, and Settings. Reviews are saved by a
+connected AI when the user requests analysis; the app does not run a background
+model or create fake findings. Empty and connection-error states explain what to do.
 
-## Build on this device
+Each review separates observations, interpretation, practical recommendations,
+confidence/limitations, time window, and cited event evidence. Client-provided author
+labels are displayed as labels, not verified identities. Evidence snapshots contain
+only bounded event metadata and safe domain names, never raw clipboard/path/URL/
+credential details. Reviews expire seven days after creation.
 
-```sh
-/var/jb/usr/local/bin/python3.14 native/build.py
-```
+Settings → Developer Mode is off by default. Enabling it adds a Developer tab with
+app diagnostics, raw activity feed, MCP configuration/copy/share tools, and local web
+dashboard. Technical IDs/actions appear in evidence details only in Developer Mode.
+The normal app refreshes on appearance/pull-to-refresh; raw developer views retain
+visible-only polling. The generated artwork is bundled for the overview.
 
-Requires clang, ldid, dpkg-deb, and `/var/theos/sdks/iPhoneOS15.6.sdk`. The script builds arm64 for iOS 15+, signs the executable, creates icons and a manifest, and packages a rootless application under `/var/jb/Applications/PrivacyMonitor.app`. Output: `native/build/PrivacyMonitor-App.deb` (ignored by Git).
+## Build and install
 
-## Install
+Use `distribution/build_repo.py` to build/sign the native app, engine, and collector
+packages with consistent versions. The builder requires clang, ldid, dpkg-deb,
+Theos, and `/var/theos/sdks/iPhoneOS15.6.sdk`. Target: rootless arm64, iOS 15+.
+Install/update Privacy Monitor from https://satyamsaxena1.github.io/repo/ in Sileo.
+The collector dependency supplies `/api/insights` and stores reviews alongside events.
+No privileged installation is performed by the build script.
 
-Requires the existing `com.appmon.tweak` package **and a running collector on 127.0.0.1:8800**. The native package is a companion; it does not install or replace the collector. Install the deb using Sileo/Zebra. The post-install script runs uicache to register the Home Screen icon. No respring is requested by this package.
+## AI connection
 
-On the development device, a copy is available at `/var/tmp/PrivacyMonitor-App.deb`. The collector also serves a copy from `appmon/static/PrivacyMonitor-App.deb` at `http://127.0.0.1:8800/download/app`. Download in Safari, open its download list, and share the package to Sileo.
+Developer → MCP connection setup provides on-device Claude Code/Codex commands,
+MCP JSON, and validated SSH configuration for computer clients. Copy/share prepares
+configuration; it never executes a command or uploads history. In normal mode,
+Ask for a review shares a plain-language request for the user to send to an assistant.
+See `../privacy-monitor-ai/README.md` for tool capabilities and data handling.
 
-## Verification status
+## Verification limits
 
-Compiled and signed on-device; verified arm64 Mach-O, code signature load command, plist, and rootless Debian package contents. Native UI launch/interaction requires installing the package and has not yet been tested. Confirm app launch, dark/light appearance, large text, pull-to-refresh, app timeline navigation, search, event details, and background/foreground refresh behavior after installation.
-
-## Connect AI (beta2)
-
-The fourth-tab layout is Apps, Activity, Connect AI, Setup. Connect AI checks for
-the installed MCP launcher, provides copy actions for on-device Claude Code/Codex
-registration and stdio JSON, and generates copyable/shareable SSH JSON from a
-user-entered iPhone hostname/IP. It opens the matching website guide. Copy/share
-never executes the command or uploads activity. Desktop use requires working
-key-based SSH; browser/cloud-only clients cannot launch a local stdio server.
-Native code compiles on-device; actual UI interactions remain manual verification.
+Native Objective-C builds and signs on this device. Migration, MCP read/write,
+evidence validation, idempotent retries, redaction, retention, and HTTP read-back
+are tested with isolated databases. Actual installed UI layout, Dynamic Type,
+VoiceOver, share flows, developer-mode switching, and fresh root installation still
+need device observation; no automated native UI runner is available here.
