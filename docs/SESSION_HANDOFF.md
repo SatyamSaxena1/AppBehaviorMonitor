@@ -177,3 +177,6 @@ Generated amber/coral source/listing artwork was verified live before this work.
 
 
 GitHub rejected the optional workflow edit because the OAuth login lacks workflow scope. Restored the existing workflow unchanged and amended only the unpublished website commit; local JavaScriptCore tests remain passed. The standalone JS test file is available for future CI integration, without broadening credentials.
+
+
+Beta2 publication verified live: manifest reports 1.0.1~beta2; all three new package sizes/SHA-256 hashes match; Packages.gz matches Packages; Release retains Components; public project page contains the Connect AI controls and the served JS includes the SSH configuration builder. Website commit d1a0a31 and implementation source commit 24acfc4 are pushed. User should refresh Sileo and update Privacy Monitor to beta2 for the native Connect AI tab. Native UI interaction has not been exercised by Codex.
