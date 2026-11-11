@@ -16,14 +16,14 @@ from urllib.parse import urlparse, parse_qs, unquote
 # ─── Human-Friendly Mappings ─────────────────────────────
 
 CATEGORY_INFO = {
-    "network":   {"icon": "&#xe894;", "label": "Internet Access",   "color": "#4a9eff", "desc": "Connections to servers and websites"},
-    "file":      {"icon": "&#xe2c7;", "label": "File Access",       "color": "#f5a623", "desc": "Reading, writing, or deleting your files"},
-    "keychain":  {"icon": "&#xe899;", "label": "Saved Passwords",   "color": "#e74c3c", "desc": "Access to saved passwords and keys"},
-    "clipboard": {"icon": "&#xe14d;", "label": "Clipboard",         "color": "#9b59b6", "desc": "Reading or writing copied text"},
-    "location":  {"icon": "&#xe55f;", "label": "Location",          "color": "#2ecc71", "desc": "Access to your GPS location"},
-    "camera":    {"icon": "&#xe412;", "label": "Camera",            "color": "#e67e22", "desc": "Using the camera"},
-    "mic":       {"icon": "&#xe31d;", "label": "Microphone",        "color": "#e74c3c", "desc": "Using the microphone"},
-    "tracking":  {"icon": "&#xef52;", "label": "Tracking",          "color": "#c0392b", "desc": "Identifying you for ads or analytics"},
+    "network":   {"icon": "↗", "label": "Internet Access",   "color": "#4a9eff", "desc": "Connections to servers and websites"},
+    "file":      {"icon": "▤", "label": "File Access",       "color": "#f5a623", "desc": "Reading, writing, or deleting your files"},
+    "keychain":  {"icon": "⚿", "label": "Saved Passwords",   "color": "#e74c3c", "desc": "Access to saved passwords and keys"},
+    "clipboard": {"icon": "▣", "label": "Clipboard",         "color": "#9b59b6", "desc": "Reading or writing copied text"},
+    "location":  {"icon": "⌖", "label": "Location",          "color": "#2ecc71", "desc": "Access to your GPS location"},
+    "camera":    {"icon": "◉", "label": "Camera",            "color": "#e67e22", "desc": "Using the camera"},
+    "mic":       {"icon": "♪", "label": "Microphone",        "color": "#e74c3c", "desc": "Using the microphone"},
+    "tracking":  {"icon": "◎", "label": "Tracking",          "color": "#c0392b", "desc": "Identifying you for ads or analytics"},
 }
 
 ACTION_LABELS = {
@@ -217,6 +217,8 @@ def events_table(events, show_app=True):
         h += f'<span class="event-action">{esc(action_label)}</span>'
         if detail:
             h += f' <span class="event-detail">{esc(detail)}</span>'
+        raw = json.dumps({"app": e["app_id"], "action": e["action"], "detail": e.get("detail"), "extra": e.get("extra_json")}, ensure_ascii=False, indent=2)
+        h += f'<details><summary>Technical details</summary><pre>{esc(raw)}</pre></details>'
         h += f'</div>'
         h += f'<div class="event-time">{time_str}</div>'
         h += '</div>'
@@ -306,6 +308,10 @@ class DashboardServer:
                         cat = path[10:]
                         page = int(qs.get("page", ["1"])[0])
                         self._serve_category(cat, page)
+                    elif path == "/help":
+                        self._serve_help()
+                    elif path == "/api/health":
+                        self._json_resp(self._health())
                     elif path == "/live":
                         self._serve_live()
                     elif path == "/search":
@@ -330,6 +336,32 @@ class DashboardServer:
 
             # ── Pages ──
 
+            def _health(self):
+                row = self._query("SELECT COUNT(*) AS total, MAX(timestamp) AS latest FROM events")[0]
+                age = max(0, time.time() - row["latest"]) if row["latest"] else None
+                return {"collector": "online", "total_events": row["total"],
+                        "latest_event": row["latest"], "seconds_since_event": age,
+                        "activity": "waiting" if age is None else "recent" if age < 120 else "idle"}
+
+            def _serve_help(self):
+                body = '''<h2>Make yourself at home</h2>
+<section class="notice"><h3>Open Privacy Monitor like an app</h3>
+<p>In Safari, tap Share → Add to Home Screen. Your dashboard stays on this iPhone.</p></section>
+<h2>Check your setup</h2>
+<ol class="guide"><li>Install AppBehaviorMonitor in Sileo or Zebra.</li>
+<li>Close and reopen the apps you want to observe after installing an update. Restart SpringBoard if your package manager asks.</li>
+<li>Open Live, switch to another app, then come back to see its activity.</li></ol>
+<h2>An app is missing or misbehaving?</h2>
+<p>The monitor records supported actions in apps where its tweak loads. An empty feed can simply mean no supported activity occurred.</p>
+<p>If you use Choicy, check the app’s tweak configuration. To stop monitoring a sensitive or unstable app, disable AppBehaviorMonitor for that app, then close and reopen it. Disabling all tweak injection also disables monitoring.</p>
+<h2>What the events mean</h2>
+<p>A recorded action is an observation, not proof of misuse. A network request does not tell us everything an app sent. Only supported hooks are visible; this is not a complete audit of every app action.</p>
+<p>App names arrive with new events. Older entries may still show an executable name. Open Technical details on a timeline entry when you need its original values.</p>
+<h2>Your history</h2>
+<p>Activity is stored locally. The collector removes entries older than seven days during its hourly cleanup while running. The dashboard does not upload your activity.</p>
+<p>If this page stops opening, the collector may be offline. After a reboot, reactivate your jailbreak and check the collector service. Repeated resprings are not a troubleshooting requirement.</p>'''
+                self._html("Help — Privacy Monitor", body)
+
             def _serve_index(self):
                 apps = self._app_summaries()[:20]
                 cats = self._query(
@@ -340,7 +372,10 @@ class DashboardServer:
                 recent = self._query("SELECT * FROM events ORDER BY id DESC LIMIT 15")
 
                 # Header stats
-                body = '<div class="stats-bar">'
+                health = self._health()
+                latest = time_ago(health["latest_event"]) if health["latest_event"] else "No activity yet"
+                body = '<section class="notice"><h2>On this iPhone</h2><p><span class="status-dot"></span>Collector online · Last activity: ' + esc(latest) + '</p><p>Open an app to record supported activity. <a href="/help">Setup &amp; help</a></p></section>'
+                body += '<div class="stats-bar">'
                 body += f'<div class="stat"><div class="stat-num">{unique_apps}</div><div class="stat-label">Apps Monitored</div></div>'
                 body += f'<div class="stat"><div class="stat-num">{total:,}</div><div class="stat-label">Activities Logged</div></div>'
                 cats_count = len(cats)
@@ -381,7 +416,7 @@ class DashboardServer:
 
                 # Recent
                 body += '<h2>Recent Activity</h2>'
-                body += events_table(recent)
+                body += events_table(recent) if recent else '<section class="notice"><h3>Ready when you are</h3><p>Close and reopen an app, use it for a moment, then visit <a href="/live">Live activity</a>.</p><a href="/help">Check your setup</a></section>'
 
                 self._html("Privacy Monitor", body)
 
@@ -446,7 +481,7 @@ class DashboardServer:
             def _serve_live(self):
                 body = '<h2>Live Activity</h2>'
                 body += '<p class="subtitle">Auto-updates every 3 seconds</p>'
-                body += '<div id="live"><p class="empty">Loading...</p></div>'
+                body += '<p id="connection" role="status" aria-live="polite">Connecting…</p><button type="button" id="refresh-now" class="filter-btn">Refresh now</button><div id="live"><p class="empty">Loading...</p></div>'
                 body += '''<script>
 const CAT = ''' + json.dumps({k: {"icon": v["icon"], "label": v["label"], "color": v["color"]} for k, v in CATEGORY_INFO.items()}) + ''';
 const ACT = ''' + json.dumps(ACTION_LABELS) + ''';
@@ -490,10 +525,18 @@ function friendlyDetail(cat, act, detail, extra) {
     return "";
 }
 
-function refresh() {
-    fetch("/api/events?limit=50")
-        .then(r => r.json())
+let refreshTimer;
+let refreshing = false;
+async function refresh() {
+    clearTimeout(refreshTimer);
+    if (refreshing || document.hidden) return;
+    refreshing = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    await fetch("/api/events?limit=50", {signal: controller.signal})
+        .then(r => { if (!r.ok) throw new Error("Request failed"); return r.json(); })
         .then(data => {
+            document.getElementById("connection").textContent = "Connected · Updated " + new Date().toLocaleTimeString();
             if (!data.length) {
                 document.getElementById("live").innerHTML = '<p class="empty">No activity yet. Open some apps!</p>';
                 return;
@@ -515,10 +558,21 @@ function refresh() {
             });
             h += "</div>";
             document.getElementById("live").innerHTML = h;
+        })
+        .catch(() => {
+            document.getElementById("connection").textContent = "Connection lost. Your last activity stays below. Retrying…";
+        })
+        .finally(() => {
+            clearTimeout(timeout);
+            refreshing = false;
+            if (!document.hidden) refreshTimer = setTimeout(refresh, 3000);
         });
 }
+document.getElementById("refresh-now").addEventListener("click", refresh);
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearTimeout(refreshTimer); else refresh();
+});
 refresh();
-setInterval(refresh, 3000);
 </script>'''
                 self._html("Live Activity — Privacy Monitor", body)
 
@@ -576,9 +630,11 @@ setInterval(refresh, 3000);
 
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{title}</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=ad_group_off,camera,content_paste,description,fingerprint,key,language,location_on,mic,network_check,public,security,shield,visibility&display=swap">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Privacy Monitor">
+<meta name="theme-color" content="#0d1117">
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 :root{{--bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#6e7681;--accent:#58a6ff}}
@@ -592,6 +648,21 @@ nav .brand{{font-weight:700;font-size:17px;color:#fff;margin-right:auto}}
 nav a{{color:var(--text2);font-size:14px;font-weight:500;padding:6px 10px;border-radius:8px}}
 nav a:hover,nav a:active{{color:#fff;background:var(--surface2)}}
 
+/* Offline, accessible device dashboard */
+.notice{{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;margin:20px 0}}
+.notice h2{{margin:0 0 8px}}
+.notice p,p{{line-height:1.6;margin:8px 0 14px}}
+.status-dot{{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3fb950;margin-right:6px}}
+.guide{{padding-left:24px;line-height:1.7}}
+.guide li{{padding:6px 0}}
+summary{{color:var(--text2);font-size:12px;cursor:pointer;padding:8px 0}}
+pre{{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;color:var(--text2)}}
+a:focus-visible,button:focus-visible,input:focus-visible{{outline:2px solid var(--accent);outline-offset:3px}}
+button{{font:inherit;cursor:pointer}}
+nav{{flex-wrap:wrap;gap:4px;padding-top:max(12px,env(safe-area-inset-top))}}
+nav a{{min-height:44px;display:flex;align-items:center}}
+body{{padding-bottom:max(40px,env(safe-area-inset-bottom))}}
+.search-form input{{min-width:0;font-size:16px}}
 /* Content */
 .content{{max-width:800px;margin:0 auto;padding:0 16px}}
 h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-0.3px}}
@@ -610,7 +681,7 @@ h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-
 .cat-grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 20px}}
 .cat-card{{display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface);border-radius:12px;border:1px solid var(--border);transition:border-color 0.15s}}
 .cat-card:active{{border-color:var(--cat-color)}}
-.cat-card-icon{{width:40px;height:40px;border-radius:10px;background:color-mix(in srgb,var(--cat-color) 15%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}}
+.cat-card-icon{{width:40px;height:40px;border-radius:10px;background:var(--surface2);background:color-mix(in srgb,var(--cat-color) 15%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}}
 .cat-card-icon .mi{{color:var(--cat-color);font-size:20px}}
 .cat-card-label{{font-weight:600;font-size:14px;color:#fff}}
 .cat-card-count{{font-size:12px;color:var(--text2)}}
@@ -627,7 +698,7 @@ h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-
 /* Events list */
 .events-list{{margin:8px 0}}
 .event-row{{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border)}}
-.event-icon{{width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--cat-color) 12%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}}
+.event-icon{{width:32px;height:32px;border-radius:8px;background:var(--surface2);background:color-mix(in srgb,var(--cat-color) 12%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}}
 .event-icon .mi{{color:var(--cat-color);font-size:16px}}
 .event-body{{flex:1;min-width:0}}
 .event-app a{{font-weight:600;font-size:14px;color:#fff}}
@@ -638,14 +709,14 @@ h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-
 /* Filters */
 .filters{{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}}
 .filter-btn{{display:inline-block;padding:6px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:13px;color:var(--text2);font-weight:500}}
-.filter-btn.active{{background:color-mix(in srgb,var(--cat-color,var(--accent)) 20%,transparent);border-color:var(--cat-color,var(--accent));color:#fff}}
+.filter-btn.active{{background:var(--surface2);background:color-mix(in srgb,var(--cat-color,var(--accent)) 20%,transparent);border-color:var(--cat-color,var(--accent));color:#fff}}
 
 /* Category badges */
-.cat-badge{{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:500;background:color-mix(in srgb,var(--cat-color) 15%,transparent);color:var(--cat-color)}}
+.cat-badge{{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--surface2);background:color-mix(in srgb,var(--cat-color) 15%,transparent);color:var(--cat-color)}}
 
 /* Search */
 .search-form{{display:flex;gap:8px;margin:12px 0}}
-.search-form input{{flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none}}
+.search-form input{{flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;outline:none}}
 .search-form input:focus{{border-color:var(--accent)}}
 .search-form button{{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}}
 
@@ -655,7 +726,7 @@ h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-
 .page-info{{font-size:13px;color:var(--text2)}}
 
 /* Material icons via codepoints */
-.mi{{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:20px;display:inline-block;line-height:1;text-transform:none;letter-spacing:normal;word-wrap:normal;white-space:nowrap;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}}
+.mi{{font-family:-apple-system,system-ui,sans-serif;font-weight:normal;font-style:normal;font-size:20px;display:inline-block;line-height:1;text-transform:none;letter-spacing:normal;word-wrap:normal;white-space:nowrap;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}}
 
 @media(max-width:500px){{
     .cat-grid{{grid-template-columns:1fr}}
@@ -670,6 +741,7 @@ h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-
 <a href="/">Home</a>
 <a href="/live">Live</a>
 <a href="/search">Search</a>
+<a href="/help">Help</a>
 </nav>
 <div class="content">
 {body}

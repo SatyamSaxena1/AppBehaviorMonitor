@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import time
 import threading
 import unittest
 from http.server import HTTPServer
@@ -49,6 +50,42 @@ class MonitorTests(unittest.TestCase):
         with urlopen(f'http://127.0.0.1:{self.server.server_port}{path}') as response:
             self.assertEqual(response.status, 200)
             return response.read().decode()
+
+    def test_health_distinguishes_idle_recent_and_empty(self):
+        self.assertEqual(json.loads(self.get('/api/health'))['activity'], 'idle')
+        with self.lock:
+            self.db.execute('UPDATE events SET timestamp = ?', (time.time(),))
+            self.db.commit()
+        self.assertEqual(json.loads(self.get('/api/health'))['activity'], 'recent')
+        with self.lock:
+            self.db.execute('DELETE FROM events')
+            self.db.commit()
+        health = json.loads(self.get('/api/health'))
+        self.assertEqual(health['activity'], 'waiting')
+        self.assertIsNone(health['seconds_since_event'])
+        self.assertIn('Ready when you are', self.get('/'))
+
+    def test_offline_setup_and_live_recovery(self):
+        home = self.get('/')
+        self.assertNotIn('fonts.googleapis.com', home)
+        self.assertNotIn('maximum-scale', home)
+        self.assertIn('apple-mobile-web-app-capable', home)
+        self.assertIn('Collector online', home)
+        self.assertIn('Add to Home Screen', self.get('/help'))
+        live = self.get('/live')
+        self.assertIn('AbortController', live)
+        self.assertIn('visibilitychange', live)
+        self.assertIn('Connection lost', live)
+        self.assertNotIn('setInterval', live)
+
+    def test_technical_details_escape_app_controlled_content(self):
+        with self.lock:
+            self.db.execute("UPDATE events SET detail = '<script>bad()</script>'")
+            self.db.commit()
+        page = self.get('/category/network')
+        self.assertIn('Technical details', page)
+        self.assertNotIn('<script>bad()</script>', page)
+        self.assertIn('&lt;script&gt;', page)
 
     def test_migration_and_ingestion(self):
         self.assertIn('display_name', [row[1] for row in self.db.execute('PRAGMA table_info(events)')])

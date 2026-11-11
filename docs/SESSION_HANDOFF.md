@@ -99,3 +99,13 @@ GitHub backup confirmed: commit `29cbdf7` pushed to `origin/master`, including s
 ## Installation verified after user installation
 
 User reported installing the package through the device UI. Codex confirmed via dpkg-query: `com.appmon.tweak` is `install ok installed`, version `1.0.0-2+debug`. Read-only database checks found 52 events carrying nonempty display names; the app-list API included display names for three apps. Overview, live page, apps API, and stats API all returned HTTP 200. This verifies installed version and real display-name ingestion; Safari visual layout and extended device stability still need observation. No respring or installation was performed by Codex.
+
+## Jailbreak user experience improvements
+
+User requested a better jailbreak experience. Updated dashboard and deployed it by gracefully terminating the mobile-owned collector for launchd to restart. No tweak update/install/respring required.
+
+Changes: offline text icons replace external Google icon font; overview shows collector availability and last activity with an actionable empty state; `/help` explains Home Screen setup, tweak activation, Choicy exclusions, observation limits, retention, and recovery; `/api/health` reports recent/idle/waiting activity separately from collector availability; timeline rows offer escaped technical details; live feed shows successful refresh time and connection errors, times out stalled requests, prevents overlapping polls, and pauses polling while hidden; mobile zoom is enabled, focus indicators and touch targets improved, and color-mix backgrounds have an older-Safari fallback.
+
+Validation: seven isolated regression tests passed, including migration, ingestion, summary names, search, route filters, health states, empty history, escaping, and served live/offline integration. Real overview, help, live, and health endpoints checked after restart and returned HTTP 200 with updated content. Actual Safari layout/JavaScript and extended device stability remain manual checks; no automated browser was available.
+
+Next: reload Safari, try Help → Add to Home Screen guidance, check live refresh after switching apps, and observe layout and stability. The App Store report-import direction was discussed separately; no App Store implementation has been started.

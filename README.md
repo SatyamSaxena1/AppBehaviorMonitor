@@ -88,3 +88,11 @@ sbreload
 ## License
 
 MIT
+
+## Everyday use
+
+Open `http://127.0.0.1:8800/` in Safari. The overview shows collector availability and the last recorded activity; no recent events does not necessarily mean collection is broken. Use **Help** for setup and Choicy guidance. Safari's **Share → Add to Home Screen** gives you a dashboard shortcut.
+
+The dashboard uses no external icon fonts. **Live** updates every three seconds while visible, shows connection failures, and includes a manual refresh button. Timeline entries provide expandable technical details. Activity reflects supported hooks, not a complete security audit or a verdict that an app is malicious.
+
+Health endpoint: `/api/health`. Regression checks: `python3 -m unittest discover -s daemon/tests -v` (on this device, use `/var/jb/usr/local/bin/python3.14`). Shared development state is in `docs/SESSION_HANDOFF.md`.
