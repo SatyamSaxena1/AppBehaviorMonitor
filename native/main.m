@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "MCPSetupController.h"
 
 static NSDictionary *Categories(void) {
     return @{@"network": @[@"Internet", @"network"], @"file": @[@"Files", @"folder"],
@@ -202,11 +203,16 @@ static NSString *Age(id timestamp) {
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     UITabBarController *tabs = [UITabBarController new];
     NSMutableArray *controllers = [NSMutableArray new];
-    NSArray *titles = @[@"Apps", @"Activity", @"Setup"];
-    NSArray *symbols = @[@"square.grid.2x2.fill", @"waveform.path.ecg", @"gearshape.fill"];
-    for (NSInteger i=0; i<3; i++) {
-        MonitorController *vc = [[MonitorController alloc] initWithStyle:UITableViewStyleInsetGrouped];
-        vc.apps = i == 0; vc.help = i == 2;
+    NSArray *titles = @[@"Apps", @"Activity", @"Connect AI", @"Setup"];
+    NSArray *symbols = @[@"square.grid.2x2.fill", @"waveform.path.ecg", @"link", @"gearshape.fill"];
+    for (NSInteger i=0; i<4; i++) {
+        UIViewController *vc;
+        if (i == 2) vc = [[MCPSetupController alloc] initWithStyle:UITableViewStyleInsetGrouped];
+        else {
+            MonitorController *monitor = [[MonitorController alloc] initWithStyle:UITableViewStyleInsetGrouped];
+            monitor.apps = i == 0; monitor.help = i == 3;
+            vc = monitor;
+        }
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
         nav.navigationBar.prefersLargeTitles = YES;
         nav.tabBarItem = [[UITabBarItem alloc] initWithTitle:titles[i] image:[UIImage systemImageNamed:symbols[i]] tag:i];

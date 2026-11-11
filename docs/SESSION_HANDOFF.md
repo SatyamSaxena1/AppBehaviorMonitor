@@ -164,3 +164,13 @@ After the Release fix deployed, Sileo still failed. Read-only inspection of its 
 ## Generated repository artwork
 
 User requested a new generated icon. Used image_gen to create an amber/coral folded shield with an eye aperture on a deep espresso background, matching the warm project palette. Preserved the original generated image and saved a source copy at appmon-repo/assets/privacy-monitor-icon.png. Applied unchanged artwork to repository icon.png, privacy-monitor-icon.png, CydiaIcon PNG variants, and the optional plugin icon. Updated Release and package-list Icon URLs to the new privacy-monitor-icon.png name and regenerated Packages.gz/index checksums. Updated the distribution builder to retain the artwork. No deb binaries were changed or republished under an existing version; installed native Home Screen icon is unchanged. Future native icon export/versioned app packaging is separate work.
+
+## App and website MCP onboarding, beta2
+
+User requested an option to add MCP in both the app and website. Added `native/MCPSetupController.h/.m` with a dedicated Connect AI tab: installed-launcher check, copyable Claude Code/Codex commands, on-device MCP JSON, host validation and copy/share SSH config, privacy/coverage explanation, and guide link. These actions prepare configuration; they do not run commands or silently connect clients. Rebuilt/signed native app and all distribution packages as `1.0.1~beta2` (native CFBundleVersion 3), preserving beta1 artifacts. No package installed by Codex.
+
+Website project page now has Add MCP navigation and a `#connect` section, with on-device CLI/JSON copy buttons, SSH host input and JSON builder, accessible copy status, and text preview. Homepage project card and repository page link to the same flow. Clipboard-unavailable cases show selectable text. Added JS configuration tests to existing website CI and an iOS JavaScriptCore harness at `distribution/test_connect.m` for on-device verification.
+
+Checks passed: native compilation/signing, three-package metadata/checksum/Release validation, JavaScriptCore client-command/JSON/host-validation tests, isolated packaged collector/socket/HTTP/MCP/shutdown smoke test, local page links and unique IDs, and APT beta2 upgrade simulation. Actual native screen/copy/share behavior still needs installed-device observation. Website JS does not make network requests or upload metadata; returned MCP tool results enter the chosen AI client's conversation only when used.
+
+Generated amber/coral source/listing artwork was verified live before this work. It remains the repository/package-list icon; the native Home Screen icon is still the original asset. Source build generator preserves the generated repository artwork.

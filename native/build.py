@@ -14,7 +14,7 @@ env = dict(os.environ, PATH='/var/jb/usr/bin:/var/jb/bin:/usr/bin:/bin', LC_ALL=
 subprocess.run(['/var/jb/usr/bin/clang', '-isysroot', str(sdk), '-target', 'arm64-apple-ios15.0',
                 '-fobjc-arc', '-fmodules', '-Wall', '-Wextra', '-Wno-unused-parameter',
                 '-framework', 'UIKit', '-framework', 'Foundation',
-                str(root / 'main.m'), '-o', str(app / 'PrivacyMonitor')], check=True, env=env)
+                str(root / 'main.m'), str(root / 'MCPSetupController.m'), '-o', str(app / 'PrivacyMonitor')], check=True, env=env)
 subprocess.run(['/var/jb/usr/bin/ldid', '-S', str(app / 'PrivacyMonitor')], check=True, env=env)
 info = dict(CFBundleIdentifier='com.appmon.native', CFBundleName='Privacy Monitor',
             CFBundleDisplayName='Privacy Monitor', CFBundleExecutable='PrivacyMonitor',

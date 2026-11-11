@@ -19,3 +19,13 @@ On the development device, a copy is available at `/var/tmp/PrivacyMonitor-App.d
 ## Verification status
 
 Compiled and signed on-device; verified arm64 Mach-O, code signature load command, plist, and rootless Debian package contents. Native UI launch/interaction requires installing the package and has not yet been tested. Confirm app launch, dark/light appearance, large text, pull-to-refresh, app timeline navigation, search, event details, and background/foreground refresh behavior after installation.
+
+## Connect AI (beta2)
+
+The fourth-tab layout is Apps, Activity, Connect AI, Setup. Connect AI checks for
+the installed MCP launcher, provides copy actions for on-device Claude Code/Codex
+registration and stdio JSON, and generates copyable/shareable SSH JSON from a
+user-entered iPhone hostname/IP. It opens the matching website guide. Copy/share
+never executes the command or uploads activity. Desktop use requires working
+key-based SSH; browser/cloud-only clients cannot launch a local stdio server.
+Native code compiles on-device; actual UI interactions remain manual verification.

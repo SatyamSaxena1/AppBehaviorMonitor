@@ -4,7 +4,7 @@ import argparse, datetime, email.utils, gzip, hashlib, json, os, plistlib, shuti
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.0.1~beta1'
+VERSION = '1.0.1~beta2'
 URL = 'https://satyamsaxena1.github.io/repo/'
 ENV = dict(os.environ, PATH='/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/usr/sbin:/usr/bin:/bin', LC_ALL='C')
 DPKG = '/var/jb/usr/bin/dpkg-deb'
@@ -39,7 +39,7 @@ def build(output):
     infofile = native/'var/jb/Applications/PrivacyMonitor.app/Info.plist'
     info = plistlib.loads(infofile.read_bytes())
     info['CFBundleShortVersionString'] = '1.0.1'
-    info['CFBundleVersion'] = '2'
+    info['CFBundleVersion'] = '3'
     infofile.write_bytes(plistlib.dumps(info))
     # Info.plist is part of the signed app; re-sign after changing it.
     run('/var/jb/usr/bin/ldid', '-S', infofile.parent/'PrivacyMonitor')
@@ -147,7 +147,7 @@ exit 0
 <style>body{max-width:660px;margin:12vh auto;padding:24px;background:#fff0dc;color:#351d12;font:18px/1.65 system-ui}img{width:90px;border-radius:22px}a{color:#9e371c}.button{display:inline-block;padding:12px 20px;border:1px solid #b36a42;border-radius:12px;margin:8px 8px 8px 0}code{overflow-wrap:anywhere}small{color:#70503d}</style>
 <img src="icon.png" alt="Privacy Monitor shield"><h1>Your apps. A clearer view.</h1><p><a href="../privacy-monitor/">Read the project story →</a></p><p>Privacy Monitor is a native activity viewer for jailbroken iPhones. Explore app timelines, network activity, and supported privacy-sensitive actions.</p>
 <p><a class="button" href="sileo://source/https://satyamsaxena1.github.io/repo/">Add to Sileo</a><a class="button" href="zbra://sources/add/https://satyamsaxena1.github.io/repo/">Add to Zebra</a></p>
-<p>Or add this source manually:<br><code>https://satyamsaxena1.github.io/repo/</code></p><h2>Install Privacy Monitor</h2><p>Sileo installs the native app, engine, collector, and Python dependency together. Reopen apps after installation so the engine can load. Use Choicy to exclude sensitive or unstable apps.</p>
+<p>Or add this source manually:<br><code>https://satyamsaxena1.github.io/repo/</code></p><p><a class="button" href="../privacy-monitor/#connect">Connect Claude / Codex</a></p><h2>Install Privacy Monitor</h2><p>Sileo installs the native app, engine, collector, and Python dependency together. Reopen apps after installation so the engine can load. Use Choicy to exclude sensitive or unstable apps.</p>
 <h2>Public beta</h2><p>For Dopamine rootless. The engine has been tested on iPhone 13 Pro Max with iOS 15.5. Native app launch and installation on a clean device are not yet verified; other devices and jailbreak types are unverified.</p><p>Recorded activity is not a verdict that an app is malicious. History stays on your device and is retained for seven days. Uninstalling preserves history.</p>
 <p><a href="https://github.com/SatyamSaxena1/AppBehaviorMonitor">Source, support &amp; issues</a> · <a href="manifest.json">Package checksums</a></p><small>Beta repository. Package indexes are currently unsigned; downloads have SHA-256 checksums. No accounts or hosted activity collection.</small></html>''')
     validate(output)
