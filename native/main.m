@@ -216,9 +216,9 @@ UIViewController *PMActivityScreen(BOOL apps) {
 - (void)developerChanged { [self configureTabs:YES]; }
 - (void)configureTabs:(BOOL)settings {
     BOOL developer = [NSUserDefaults.standardUserDefaults boolForKey:@"PMDeveloperMode"];
-    NSMutableArray *screens = [NSMutableArray arrayWithArray:@[[PMHomeController new], [PMInsightsController new]]];
-    NSMutableArray *titles = [NSMutableArray arrayWithArray:@[@"Overview", @"Insights"]];
-    NSMutableArray *icons = [NSMutableArray arrayWithArray:@[@"house.fill", @"sparkles"]];
+    NSMutableArray *screens = [NSMutableArray arrayWithArray:@[[PMHomeController new], [PMInsightsController new], [PMHistoryController new]]];
+    NSMutableArray *titles = [NSMutableArray arrayWithArray:@[@"Overview", @"Insights", @"History"]];
+    NSMutableArray *icons = [NSMutableArray arrayWithArray:@[@"house.fill", @"sparkles", @"clock.arrow.circlepath"]];
     if (developer) {
         [screens addObject:[[PMDeveloperController alloc] initWithStyle:UITableViewStyleInsetGrouped]];
         [titles addObject:@"Developer"]; [icons addObject:@"wrench.and.screwdriver"];

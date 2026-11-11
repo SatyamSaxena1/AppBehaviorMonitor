@@ -10,3 +10,6 @@ UIViewController *PMActivityScreen(BOOL apps);
 @end
 @interface PMDeveloperController : UITableViewController
 @end
+
+@interface PMHistoryController : PMCardsController
+@end

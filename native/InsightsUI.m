@@ -16,6 +16,23 @@ static UILabel *Label(NSString *text, UIFontTextStyle style, UIColor *color) {
 static UIStackView *Stack(void) {
     UIStackView *stack = [UIStackView new]; stack.axis = UILayoutConstraintAxisVertical; stack.spacing = 12; return stack;
 }
+#import "PMSessions.h"
+static UIColor *Teal(void) { return [UIColor colorWithRed:.12 green:.56 blue:.53 alpha:1]; }
+static void Glyph(UIStackView *stack, NSString *name) {
+    UIImageView *v = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:name]]; v.contentMode = UIViewContentModeScaleAspectFit; v.tintColor = Teal();
+    [v.heightAnchor constraintEqualToConstant:46].active = YES; v.isAccessibilityElement = NO; [stack addArrangedSubview:v];
+}
+static void Graphic(UIStackView *stack, NSDictionary *item) {
+    NSArray *events = item[@"evidence"] ?: @[]; NSMutableDictionary *counts = [NSMutableDictionary new];
+    NSDictionary *names = @{@"network":@"Connections", @"file":@"Files", @"keychain":@"Saved credentials", @"identifier":@"Identifiers", @"clipboard":@"Clipboard", @"sensor":@"Sensors"};
+    for (NSDictionary *e in events) { NSString *k = e[@"category"] ?: @"other"; counts[k] = @([counts[k] integerValue]+1); }
+    for (NSString *k in [[counts allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+        [stack addArrangedSubview:Label([NSString stringWithFormat:@"%@   %@",counts[k],names[k] ?: @"Other activity"], UIFontTextStyleHeadline, UIColor.labelColor)];
+        UIProgressView *bar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault]; bar.progressTintColor = Teal(); bar.trackTintColor = UIColor.tertiarySystemFillColor; bar.progress = [counts[k] floatValue]/MAX(1,events.count);
+        bar.accessibilityLabel = names[k] ?: k; bar.accessibilityValue = [NSString stringWithFormat:@"%@ of %lu cited events",counts[k],(unsigned long)events.count]; [stack addArrangedSubview:bar];
+    }
+    [stack addArrangedSubview:Label(@"Cited evidence only · not total activity or a risk score", UIFontTextStyleCaption1, UIColor.secondaryLabelColor)];
+}
 static void RequestReview(UIViewController *vc, UIView *source) {
     UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:@[ReviewRequest()] applicationActivities:nil];
     share.popoverPresentationController.sourceView = source ?: vc.view;
@@ -31,6 +48,8 @@ static void RequestReview(UIViewController *vc, UIView *source) {
 @property NSDictionary *health;
 @property NSInteger pending;
 @property NSString *failure;
+@property BOOL expandedDetails;
+@property NSString *openSession;
 - (void)render;
 - (void)load;
 - (UIStackView *)card;
@@ -74,7 +93,8 @@ static void RequestReview(UIViewController *vc, UIView *source) {
 - (void)button:(NSString *)title in:(UIStackView *)stack action:(void (^)(void))action {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     UIButtonConfiguration *config = [UIButtonConfiguration filledButtonConfiguration]; config.title = title;
-    config.baseBackgroundColor = Amber(); config.baseForegroundColor = UIColor.blackColor;
+    config.baseBackgroundColor = [Teal() colorWithAlphaComponent:.12]; config.baseForegroundColor = UIColor.labelColor;
+    button.titleLabel.numberOfLines = 0; button.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
     config.cornerStyle = UIButtonConfigurationCornerStyleLarge; config.contentInsets = NSDirectionalEdgeInsetsMake(14,16,14,16);
     button.configuration = config;
     [button addAction:[UIAction actionWithHandler:^(__kindof UIAction *sender) { action(); }] forControlEvents:UIControlEventTouchUpInside];
@@ -102,6 +122,10 @@ static void RequestReview(UIViewController *vc, UIView *source) {
     }
 }
 - (void)showInsight:(NSDictionary *)insight {
+    NSMutableArray *seen = [[NSUserDefaults.standardUserDefaults arrayForKey:@"PMViewedInsights"] mutableCopy] ?: [NSMutableArray new];
+    if (insight[@"id"] && ![seen containsObject:insight[@"id"]]) [seen addObject:insight[@"id"]];
+    if (seen.count > 500) [seen removeObjectsInRange:NSMakeRange(0,seen.count-500)];
+    [NSUserDefaults.standardUserDefaults setObject:seen forKey:@"PMViewedInsights"];
     PMInsightDetailController *detail = [PMInsightDetailController new]; detail.insight = insight;
     [self.navigationController pushViewController:detail animated:YES];
 }
@@ -116,13 +140,12 @@ static void RequestReview(UIViewController *vc, UIView *source) {
 }
 - (void)insightCard:(NSDictionary *)insight {
     UIStackView *card = [self card];
-    NSString *badge = [insight[@"priority"] isEqual:@"review"] ? @"AI INSIGHT · WORTH A LOOK" : @"AI INSIGHT · FOR CONTEXT";
-    [card addArrangedSubview:Label(badge, UIFontTextStyleCaption1, UIColor.systemOrangeColor)];
+    BOOL viewed = [[NSUserDefaults.standardUserDefaults arrayForKey:@"PMViewedInsights"] containsObject:insight[@"id"]];
+    [card addArrangedSubview:Label(viewed ? @"VIEWED REVIEW" : @"SAVED AI REVIEW", UIFontTextStyleCaption1, UIColor.secondaryLabelColor)];
     [card addArrangedSubview:Label(insight[@"title"], UIFontTextStyleTitle2, UIColor.labelColor)];
-    [card addArrangedSubview:Label(insight[@"summary"], UIFontTextStyleBody, UIColor.secondaryLabelColor)];
-    [card addArrangedSubview:Label([NSString stringWithFormat:@"%@ · %@", insight[@"author"] ?: @"AI assistant", DateText(insight[@"created_at"])], UIFontTextStyleFootnote, UIColor.secondaryLabelColor)];
+    Graphic(card, insight);
     __weak typeof(self) weakSelf = self;
-    [self button:@"Read the finding" in:card action:^{ [weakSelf showInsight:insight]; }];
+    [self button:@"Explore activity" in:card action:^{ [weakSelf showInsight:insight]; }];
 }
 @end
 
@@ -139,7 +162,13 @@ static void RequestReview(UIViewController *vc, UIView *source) {
     [status addArrangedSubview:Label(self.failure ? @"Showing your last refresh" : self.health ? @"Activity is available" : @"Checking your activity…", UIFontTextStyleHeadline, UIColor.labelColor)];
     [status addArrangedSubview:Label(self.health ? [NSString stringWithFormat:@"%lu saved AI reviews · Latest recorded activity: %@", (unsigned long)self.insights.count, DateText(self.health[@"latest_event"])] : @"Pull down to refresh. An empty history can mean no supported actions were observed.", UIFontTextStyleSubheadline, UIColor.secondaryLabelColor)];
     if (self.failure) { UIStackView *error = [self card]; [error addArrangedSubview:Label(self.failure, UIFontTextStyleBody, UIColor.secondaryLabelColor)]; }
-    if (self.insights.count) [self insightCard:self.insights.firstObject]; else [self emptyCard];
+    if (self.insights.count && NSDate.date.timeIntervalSince1970-[self.insights.firstObject[@"created_at"] doubleValue]<86400) [self insightCard:self.insights.firstObject];
+    else if (self.insights.count) {
+        UIStackView *past = [self card]; Glyph(past,@"clock.arrow.circlepath");
+        [past addArrangedSubview:Label(@"Your earlier reviews are in History", UIFontTextStyleTitle2, UIColor.labelColor)];
+        __weak typeof(self) weakSelf = self;
+        [self button:@"Ask for a fresh review" in:past action:^{ RequestReview(weakSelf,nil); }];
+    } else [self emptyCard];
     UIStackView *note = [self card]; [note addArrangedSubview:Label(@"A review, not a verdict.", UIFontTextStyleHeadline, UIColor.labelColor)];
     [note addArrangedSubview:Label(@"Only supported actions in monitored apps are visible. Missing events don’t prove that an app never used a feature.", UIFontTextStyleBody, UIColor.secondaryLabelColor)];
 }
@@ -149,24 +178,79 @@ static void RequestReview(UIViewController *vc, UIView *source) {
 - (void)viewDidLoad { self.title = @"AI Insights"; [super viewDidLoad]; }
 - (void)render {
     [self clear];
-    [self.stack addArrangedSubview:Label(@"Findings you can understand—and check.", UIFontTextStyleTitle2, UIColor.labelColor)];
+    [self.stack addArrangedSubview:Label(@"Your latest session", UIFontTextStyleTitle2, UIColor.labelColor)];
     if (self.failure) [self.stack addArrangedSubview:Label(self.failure, UIFontTextStyleBody, UIColor.secondaryLabelColor)];
     if (!self.insights.count) [self emptyCard];
-    for (NSDictionary *insight in self.insights) [self insightCard:insight];
+    NSArray *latest = Sessions(self.insights).firstObject;
+    BOOL fresh = latest.count && NSDate.date.timeIntervalSince1970-[latest.firstObject[@"created_at"] doubleValue]<86400;
+    if (fresh) for (NSDictionary *insight in latest) [self insightCard:insight];
+    else if (self.insights.count) [self.stack addArrangedSubview:Label(@"Your latest session is more than a day old. Find it in History, or ask for a fresh review in Settings.", UIFontTextStyleBody, UIColor.secondaryLabelColor)];
+    [self.stack addArrangedSubview:Label(@"Earlier sessions are kept in History.", UIFontTextStyleFootnote, UIColor.secondaryLabelColor)];
+}
+@end
+
+@implementation PMHistoryController
+- (void)viewDidLoad { self.title = @"History"; [super viewDidLoad]; }
+- (void)render {
+    [self clear];
+    [self.stack addArrangedSubview:Label(@"Past sessions, quietly kept.", UIFontTextStyleTitle2, UIColor.labelColor)];
+    [self.stack addArrangedSubview:Label(@"Reviews from the same assistant less than 30 minutes apart are grouped. Previous sessions, and reviews older than a day, live here for seven days. Moving here does not mark a finding resolved.", UIFontTextStyleSubheadline, UIColor.secondaryLabelColor)];
+    if (self.failure) [self.stack addArrangedSubview:Label(self.failure, UIFontTextStyleBody, UIColor.secondaryLabelColor)];
+    NSArray *groups = Sessions(self.insights);
+    BOOL fresh = groups.count && NSDate.date.timeIntervalSince1970-[groups.firstObject[0][@"created_at"] doubleValue]<86400;
+    if (groups.count <= (fresh ? 1 : 0)) [self.stack addArrangedSubview:Label(@"No earlier sessions yet.", UIFontTextStyleBody, UIColor.secondaryLabelColor)];
+    for (NSUInteger i=fresh ? 1 : 0;i<groups.count;i++) {
+        NSArray *group = groups[i]; NSDictionary *first = group.firstObject; NSString *key = first[@"id"];
+        UIStackView *card = [self card]; Glyph(card,@"clock.arrow.circlepath");
+        [card addArrangedSubview:Label(DateText(first[@"created_at"]), UIFontTextStyleHeadline, UIColor.labelColor)];
+        [card addArrangedSubview:Label([NSString stringWithFormat:@"%@ · %lu findings",first[@"author"] ?: @"Assistant",(unsigned long)group.count], UIFontTextStyleSubheadline, UIColor.secondaryLabelColor)];
+        BOOL open = [self.openSession isEqual:key]; __weak typeof(self) weakSelf = self;
+        [self button:open ? @"Close session" : @"Open session" in:card action:^{ weakSelf.openSession = open ? nil : key; [weakSelf render]; }];
+        if (open) for (NSDictionary *item in group) [self button:item[@"title"] in:card action:^{ [weakSelf showInsight:item]; }];
+    }
 }
 @end
 
 @implementation PMInsightDetailController
-- (void)viewDidLoad { self.title = @"The finding"; [super viewDidLoad]; }
+- (void)viewDidLoad { self.title = @"Activity story"; [super viewDidLoad]; }
 - (void)render {
     [self clear]; NSDictionary *item = self.insight;
     UIStackView *head = [self card];
-    [head addArrangedSubview:Label(@"AI-GENERATED ANALYSIS", UIFontTextStyleCaption1, UIColor.systemOrangeColor)];
+    Glyph(head, @"sparkles");
     [head addArrangedSubview:Label(item[@"title"], UIFontTextStyleTitle1, UIColor.labelColor)];
     [head addArrangedSubview:Label(item[@"summary"], UIFontTextStyleBody, UIColor.secondaryLabelColor)];
-    NSArray *keys = @[@"observations", @"interpretation", @"recommendations"];
+    UIStackView *visual = [self card];
+    [visual addArrangedSubview:Label(@"Activity at a glance", UIFontTextStyleTitle2, UIColor.labelColor)]; Graphic(visual,item);
+    NSMutableSet *nodes = [NSMutableSet new];
+    for (NSDictionary *e in item[@"evidence"]) {
+        NSString *name = [e[@"display_name"] length] ? e[@"display_name"] : e[@"exe_name"] ?: @"App";
+        NSString *target = e[@"domain"] ?: @{@"identifier":@"App identifier", @"file":@"Device files", @"keychain":@"Saved credentials", @"clipboard":@"Clipboard"}[e[@"category"]] ?: @"Recorded action";
+        NSString *node = [NSString stringWithFormat:@"%@  →  %@",name,target];
+        if (![nodes containsObject:node]) {
+            [nodes addObject:node]; __weak typeof(self) weakSelf = self;
+            [self button:node in:visual action:^{ weakSelf.expandedDetails = YES; [weakSelf render]; }];
+            UIButton *tile = (UIButton *)visual.arrangedSubviews.lastObject;
+            UIButtonConfiguration *config = tile.configuration;
+            config.image = [UIImage systemImageNamed:e[@"domain"] ? @"network" : @"iphone"];
+            config.imagePlacement = NSDirectionalRectEdgeTop; config.imagePadding = 12;
+            config.preferredSymbolConfigurationForImage = [UIImageSymbolConfiguration configurationWithPointSize:30 weight:UIImageSymbolWeightRegular];
+            tile.configuration = config;
+        }
+        if (nodes.count >= 6) break;
+    }
+    UIStackView *actions = [self card]; Glyph(actions,@"checklist");
+    [actions addArrangedSubview:Label(@"Your next moves", UIFontTextStyleTitle2, UIColor.labelColor)];
+    NSUInteger step = 0;
+    for (NSString *line in item[@"recommendations"]) [actions addArrangedSubview:Label([NSString stringWithFormat:@"%lu   %@",(unsigned long)++step,line], UIFontTextStyleBody, UIColor.labelColor)];
+    UIStackView *toggle = [self card]; __weak typeof(self) weakSelf = self;
+    [self button:self.expandedDetails ? @"Hide explanation & evidence" : @"Show explanation & evidence" in:toggle action:^{ weakSelf.expandedDetails = !weakSelf.expandedDetails; [weakSelf render]; }];
+    if (!self.expandedDetails) {
+        [toggle addArrangedSubview:Label([NSString stringWithFormat:@"Evidence confidence: %@",item[@"confidence"]], UIFontTextStyleSubheadline, UIColor.secondaryLabelColor)];
+        [toggle addArrangedSubview:Label(item[@"limitations"], UIFontTextStyleFootnote, UIColor.secondaryLabelColor)]; return;
+    }
+    NSArray *keys = @[@"observations", @"interpretation"];
     NSArray *titles = @[@"What was observed", @"What it could mean", @"What you can do"];
-    for (NSInteger i=0; i<3; i++) {
+    for (NSInteger i=0; i<2; i++) {
         UIStackView *card = [self card]; [card addArrangedSubview:Label(titles[i], UIFontTextStyleHeadline, UIColor.labelColor)];
         id value = item[keys[i]];
         if ([value isKindOfClass:NSArray.class]) for (NSString *line in value) [card addArrangedSubview:Label([@"• " stringByAppendingString:line], UIFontTextStyleBody, UIColor.secondaryLabelColor)];
@@ -179,10 +263,10 @@ static void RequestReview(UIViewController *vc, UIView *source) {
     [limits addArrangedSubview:Label([NSString stringWithFormat:@"Review window: %@ – %@\nSaved %@ · Author label: %@",DateText(item[@"period_start"]),DateText(item[@"period_end"]),DateText(item[@"created_at"]),item[@"author"] ?: @"AI assistant"], UIFontTextStyleFootnote, UIColor.secondaryLabelColor)];
     UIStackView *evidence = [self card];
     [evidence addArrangedSubview:Label(@"The recorded evidence", UIFontTextStyleHeadline, UIColor.labelColor)];
-    NSDictionary *actions = @{@"identifierForVendor":@"Read an app-vendor identifier", @"data_task":@"Created a network request", @"copy_matching":@"Requested saved credentials", @"get_string":@"Read the clipboard"};
+    NSDictionary *actionNames = @{@"identifierForVendor":@"Read an app-vendor identifier", @"data_task":@"Created a network request", @"copy_matching":@"Requested saved credentials", @"get_string":@"Read the clipboard"};
     for (NSDictionary *event in item[@"evidence"]) {
         NSString *name = [event[@"display_name"] isKindOfClass:NSString.class] && [event[@"display_name"] length] ? event[@"display_name"] : event[@"exe_name"];
-        NSString *action = actions[event[@"action"]] ?: @"A supported action was recorded";
+        NSString *action = actionNames[event[@"action"]] ?: @"A supported action was recorded";
         [evidence addArrangedSubview:Label([NSString stringWithFormat:@"%@ · %@\n%@%@",name ?: @"App",DateText(event[@"timestamp"]),action,event[@"domain"] ? [@" · " stringByAppendingString:event[@"domain"]] : @""], UIFontTextStyleBody, UIColor.secondaryLabelColor)];
         if (Developer()) [evidence addArrangedSubview:Label([NSString stringWithFormat:@"Event %@ · %@ · %@/%@",event[@"id"],event[@"app_id"],event[@"category"],event[@"action"]], UIFontTextStyleCaption1, UIColor.secondaryLabelColor)];
     }
