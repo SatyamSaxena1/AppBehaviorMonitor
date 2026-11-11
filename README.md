@@ -96,3 +96,14 @@ Open `http://127.0.0.1:8800/` in Safari. The overview shows collector availabili
 The dashboard uses no external icon fonts. **Live** updates every three seconds while visible, shows connection failures, and includes a manual refresh button. Timeline entries provide expandable technical details. Activity reflects supported hooks, not a complete security audit or a verdict that an app is malicious.
 
 Health endpoint: `/api/health`. Regression checks: `python3 -m unittest discover -s daemon/tests -v` (on this device, use `/var/jb/usr/local/bin/python3.14`). Shared development state is in `docs/SESSION_HANDOFF.md`.
+
+## Sileo distribution and optional AI analysis
+
+The beta repository is hosted at **https://satyamsaxena1.github.io/repo/**.
+Install **Privacy Monitor** from Sileo/Zebra to resolve the native app, engine,
+collector service, and Python dependency. See [distribution notes](distribution/README.md)
+for reproducible builds, compatibility limits, and release validation.
+
+An optional [read-only MCP connector](privacy-monitor-ai/README.md) lets a connected
+Claude/Codex client query activity summaries, recent metadata, and contacted domains.
+It omits raw clipboard/path/URL/credential details and never uploads activity by itself.

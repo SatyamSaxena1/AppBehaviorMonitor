@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "privacy-monitor-ai",
+  "version": "0.1.0",
+  "description": "Read local iPhone activity metadata to explain observed app behavior.",
+  "author": {"name": "SatyamSaxena1"},
+  "extensions": {"com.openai": {"interface": {
+    "displayName": "Privacy Monitor",
+    "shortDescription": "Explain iPhone app activity",
+    "longDescription": "Read-only local activity summaries, event metadata, and domain observations. Runs on the jailbroken iPhone; no hosted activity upload.",
+    "developerName": "SatyamSaxena1",
+    "category": "Productivity",
+    "logo": "./assets/icon.png",
+    "defaultPrompt": "Explain my recently observed app activity and distinguish observations from security conclusions."
+  }}}
+}

@@ -2,24 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.appmon.collector</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/var/jb/usr/local/bin/python3.14</string>
-        <string>/var/jb/var/mobile/appmon/collector.py</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>WorkingDirectory</key>
-    <string>/var/jb/var/mobile/appmon</string>
-    <key>StandardErrorPath</key>
-    <string>/var/jb/var/mobile/Documents/appmon/collector.log</string>
-    <key>StandardOutPath</key>
-    <string>/var/jb/var/mobile/Documents/appmon/collector.log</string>
-    <key>UserName</key>
-    <string>mobile</string>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.appmon.collector</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/var/jb/bin/sh</string>
+		<string>/var/jb/usr/libexec/privacy-monitor/launch</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/var/jb/var/mobile/Documents/appmon/collector.log</string>
+	<key>StandardOutPath</key>
+	<string>/var/jb/var/mobile/Documents/appmon/collector.log</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>UserName</key>
+	<string>mobile</string>
+	<key>WorkingDirectory</key>
+	<string>/var/jb/usr/libexec/privacy-monitor</string>
 </dict>
 </plist>

@@ -15,9 +15,11 @@ import threading
 import time
 from pathlib import Path
 
-SOCK_PATH = "/var/jb/var/mobile/Documents/appmon/appmon.sock"
-DB_PATH = "/var/jb/var/mobile/Documents/appmon/appmon.db"
-LOG_PATH = "/var/jb/var/mobile/Documents/appmon/collector.log"
+DATA_DIR = Path(os.environ.get("APPMON_DATA_DIR", "/var/jb/var/mobile/Documents/appmon"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+SOCK_PATH = str(DATA_DIR / "appmon.sock")
+DB_PATH = str(DATA_DIR / "appmon.db")
+LOG_PATH = str(DATA_DIR / "collector.log")
 MAX_MSG = 4096
 RETENTION_DAYS = 7
 CLEANUP_INTERVAL = 3600  # 1 hour
@@ -204,10 +206,10 @@ class Collector:
 
         # Import and start dashboard
         from dashboard import DashboardServer
-        dash = DashboardServer(self.db, self.db_lock)
+        dash = DashboardServer(self.db, self.db_lock, port=int(os.environ.get("APPMON_PORT", "8800")))
         dash_thread = threading.Thread(target=dash.serve, daemon=True)
         dash_thread.start()
-        log.info("Dashboard at http://127.0.0.1:8800/")
+        log.info("Dashboard at http://127.0.0.1:%d/", dash.port)
 
         # Main thread waits
         while self.running:

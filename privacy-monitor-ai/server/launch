@@ -1,0 +1,10 @@
+#!/var/jb/bin/sh
+set -eu
+base=$(dirname "$0")
+for python in /var/jb/usr/bin/python3 /var/jb/usr/local/bin/python3 /var/jb/usr/local/bin/python3.14; do
+    if [ -x "$python" ] && "$python" -c 'import sqlite3' 2>/dev/null; then
+        exec "$python" "$base/mcp_server.py" "$@"
+    fi
+done
+printf '%s\n' 'Python 3 with sqlite3 is required.' >&2
+exit 1
