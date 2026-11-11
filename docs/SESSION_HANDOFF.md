@@ -95,3 +95,7 @@ Still pending:
 Repository checkpoint includes the newer working tweak and Python sources, regression tests, and portable handoff documentation. Build output is reproducible and is not committed.
 
 GitHub backup confirmed: commit `29cbdf7` pushed to `origin/master`, including source, tests, and handoff notes. Git's configured shell-based gh credential helper cannot execute on this device. Push succeeded using a temporary Python GIT_ASKPASS executable that obtained the existing gh token in memory; no token was written to the repository or printed. Future pushes may need the same workaround until the device's Git shell/helper configuration is repaired.
+
+## Installation verified after user installation
+
+User reported installing the package through the device UI. Codex confirmed via dpkg-query: `com.appmon.tweak` is `install ok installed`, version `1.0.0-2+debug`. Read-only database checks found 52 events carrying nonempty display names; the app-list API included display names for three apps. Overview, live page, apps API, and stats API all returned HTTP 200. This verifies installed version and real display-name ingestion; Safari visual layout and extended device stability still need observation. No respring or installation was performed by Codex.
