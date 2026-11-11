@@ -154,3 +154,8 @@ User reported a missing source icon in Sileo. The repository had package-level I
 ## Sileo Release parsing fix
 
 User reported a source refresh failure. Checked the actual Sileo RepoManager.swift parser: after architecture validation it explicitly requires a components key, even for flat repositories. Our Release omitted it. Added `Components: main` to the live repository and generator; validate() now requires nonempty Components and iphoneos-arm64. Revalidated package paths, versions, checksums, gzip index and maintainer scripts without rebuilding/changing debs. A separate MinhTon source error is unrelated: its Release advertises only iphoneos-arm, incompatible with this rootless device. No foreign source was edited or removed.
+
+
+## Device-specific Sileo stale-cache diagnosis
+
+After the Release fix deployed, Sileo still failed. Read-only inspection of its NSURLCache database at /var/mobile/Library/Caches/org.coolstar.SileoStore/Cache.db confirmed the exact cached response for our Release URL was the old version without Components. Closed Sileo and transactionally removed only that URL’s response/receiver/blob cache rows. Sources, packages, and other cached responses were preserved. User must reopen Sileo and refresh; check the cached Release afterward if failures persist. No root access or respring was used.
