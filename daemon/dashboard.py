@@ -5,6 +5,7 @@ Human-friendly privacy monitor UI.
 """
 
 import html
+from pathlib import Path
 import json
 import re
 import sqlite3
@@ -14,6 +15,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote
 
 # ─── Human-Friendly Mappings ─────────────────────────────
+
+APP_PACKAGE = Path(__file__).resolve().parent / "static" / "PrivacyMonitor-App.deb"
 
 CATEGORY_INFO = {
     "network":   {"icon": "↗", "label": "Internet Access",   "color": "#4a9eff", "desc": "Connections to servers and websites"},
@@ -308,6 +311,17 @@ class DashboardServer:
                         cat = path[10:]
                         page = int(qs.get("page", ["1"])[0])
                         self._serve_category(cat, page)
+                    elif path == "/download/app":
+                        if not APP_PACKAGE.is_file():
+                            self.send_error(404, "Native app package is not available on this device")
+                            return
+                        data = APP_PACKAGE.read_bytes()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/vnd.debian.binary-package")
+                        self.send_header("Content-Disposition", 'attachment; filename="PrivacyMonitor-App.deb"')
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
                     elif path == "/help":
                         self._serve_help()
                     elif path == "/api/health":
@@ -344,7 +358,7 @@ class DashboardServer:
                         "activity": "waiting" if age is None else "recent" if age < 120 else "idle"}
 
             def _serve_help(self):
-                body = '''<h2>Make yourself at home</h2>
+                body = '''<h2>Get the native app</h2><section class="notice"><p>Download Privacy Monitor, then share the downloaded package to Sileo to install its Home Screen app. It uses the collector already running on this iPhone.</p><a class="filter-btn" href="/download/app">Download iPhone app</a></section><h2>Make yourself at home</h2>
 <section class="notice"><h3>Open Privacy Monitor like an app</h3>
 <p>In Safari, tap Share → Add to Home Screen. Your dashboard stays on this iPhone.</p></section>
 <h2>Check your setup</h2>

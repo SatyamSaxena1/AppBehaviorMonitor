@@ -10,6 +10,7 @@ import threading
 import unittest
 from http.server import HTTPServer
 from urllib.request import urlopen
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -86,6 +87,19 @@ class MonitorTests(unittest.TestCase):
         self.assertIn('Technical details', page)
         self.assertNotIn('<script>bad()</script>', page)
         self.assertIn('&lt;script&gt;', page)
+
+    def test_native_download_available_and_missing(self):
+        package = Path(self.tmp.name) / 'PrivacyMonitor-App.deb'
+        with patch.object(dashboard, 'APP_PACKAGE', package):
+            with self.assertRaises(HTTPError) as error:
+                self.get('/download/app')
+            self.assertEqual(error.exception.code, 404)
+            error.exception.close()
+            package.write_bytes(b'!<arch>\nfixture')
+            with urlopen(f'http://127.0.0.1:{self.server.server_port}/download/app') as response:
+                self.assertEqual(response.headers['Content-Type'], 'application/vnd.debian.binary-package')
+                self.assertIn('PrivacyMonitor-App.deb', response.headers['Content-Disposition'])
+                self.assertEqual(response.read(), package.read_bytes())
 
     def test_migration_and_ingestion(self):
         self.assertIn('display_name', [row[1] for row in self.db.execute('PRAGMA table_info(events)')])

@@ -7,3 +7,6 @@ __pycache__/
 *.db-wal
 *.log
 .env
+
+native/build/
+*.deb
