@@ -112,7 +112,8 @@ exit 0
     collector_deb = package(collector, 'com.appmon.collector', 'Privacy Monitor Collector',
                             'python3 (>= 3.9) | xyz.cypwn.python314 (>= 3.14)', debs)
 
-    shutil.copy2(native/'var/jb/Applications/PrivacyMonitor.app/AppIcon60x60@3x.png', output/'icon.png')
+    shutil.copy2(ROOT/'assets/privacy-monitor-icon.png', output/'icon.png')
+    shutil.copy2(ROOT/'assets/privacy-monitor-icon.png', output/'privacy-monitor-icon.png')
     for name in ['CydiaIcon.png', 'CydiaIcon@2x.png', 'CydiaIcon@3x.png']:
         shutil.copy2(output/'icon.png', output/name)
     entries=[]
@@ -121,12 +122,12 @@ exit 0
         payload=file.read_bytes()
         fields=run(DPKG, '-f', file).strip()
         relative=file.relative_to(output).as_posix()
-        entries.append(fields+'\n'+f'Filename: {relative}\nSize: {len(payload)}\nMD5sum: {hashlib.md5(payload).hexdigest()}\nSHA256: {hashlib.sha256(payload).hexdigest()}\nSHA512: {hashlib.sha512(payload).hexdigest()}\nDepiction: {URL}\nSileoDepiction: {URL}depiction.json\nIcon: {URL}icon.png\n')
+        entries.append(fields+'\n'+f'Filename: {relative}\nSize: {len(payload)}\nMD5sum: {hashlib.md5(payload).hexdigest()}\nSHA256: {hashlib.sha256(payload).hexdigest()}\nSHA512: {hashlib.sha512(payload).hexdigest()}\nDepiction: {URL}\nSileoDepiction: {URL}depiction.json\nIcon: {URL}privacy-monitor-icon.png\n')
         assets.append(dict(file=relative, sha256=hashlib.sha256(payload).hexdigest(), size=len(payload)))
     data=('\n'.join(entries)+'\n').encode()
     (output/'Packages').write_bytes(data)
     (output/'Packages.gz').write_bytes(gzip.compress(data, mtime=0))
-    lines=['Origin: Satyam Saxena', 'Label: Privacy Monitor Beta', 'Icon: '+URL+'CydiaIcon.png', 'Suite: stable', 'Version: 1.0',
+    lines=['Origin: Satyam Saxena', 'Label: Privacy Monitor Beta', 'Icon: '+URL+'privacy-monitor-icon.png', 'Suite: stable', 'Version: 1.0',
            'Codename: privacy-monitor', 'Architectures: iphoneos-arm64', 'Components: main',
            'Description: Privacy Monitor for Dopamine rootless iOS 15. Public beta.',
            'Date: '+email.utils.format_datetime(datetime.datetime.now(datetime.timezone.utc),usegmt=True)]

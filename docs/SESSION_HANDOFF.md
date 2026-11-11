@@ -159,3 +159,8 @@ User reported a source refresh failure. Checked the actual Sileo RepoManager.swi
 ## Device-specific Sileo stale-cache diagnosis
 
 After the Release fix deployed, Sileo still failed. Read-only inspection of its NSURLCache database at /var/mobile/Library/Caches/org.coolstar.SileoStore/Cache.db confirmed the exact cached response for our Release URL was the old version without Components. Closed Sileo and transactionally removed only that URL’s response/receiver/blob cache rows. Sources, packages, and other cached responses were preserved. User must reopen Sileo and refresh; check the cached Release afterward if failures persist. No root access or respring was used.
+
+
+## Generated repository artwork
+
+User requested a new generated icon. Used image_gen to create an amber/coral folded shield with an eye aperture on a deep espresso background, matching the warm project palette. Preserved the original generated image and saved a source copy at appmon-repo/assets/privacy-monitor-icon.png. Applied unchanged artwork to repository icon.png, privacy-monitor-icon.png, CydiaIcon PNG variants, and the optional plugin icon. Updated Release and package-list Icon URLs to the new privacy-monitor-icon.png name and regenerated Packages.gz/index checksums. Updated the distribution builder to retain the artwork. No deb binaries were changed or republished under an existing version; installed native Home Screen icon is unchanged. Future native icon export/versioned app packaging is separate work.
