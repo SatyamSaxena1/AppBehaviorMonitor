@@ -1,15 +1,241 @@
 """
 AppBehaviorMonitor — Web Dashboard
 Serves on 127.0.0.1:8800. Pure Python, no dependencies.
+Human-friendly privacy monitor UI.
 """
 
 import html
 import json
+import re
 import sqlite3
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
+
+# ─── Human-Friendly Mappings ─────────────────────────────
+
+CATEGORY_INFO = {
+    "network":   {"icon": "&#xe894;", "label": "Internet Access",   "color": "#4a9eff", "desc": "Connections to servers and websites"},
+    "file":      {"icon": "&#xe2c7;", "label": "File Access",       "color": "#f5a623", "desc": "Reading, writing, or deleting your files"},
+    "keychain":  {"icon": "&#xe899;", "label": "Saved Passwords",   "color": "#e74c3c", "desc": "Access to saved passwords and keys"},
+    "clipboard": {"icon": "&#xe14d;", "label": "Clipboard",         "color": "#9b59b6", "desc": "Reading or writing copied text"},
+    "location":  {"icon": "&#xe55f;", "label": "Location",          "color": "#2ecc71", "desc": "Access to your GPS location"},
+    "camera":    {"icon": "&#xe412;", "label": "Camera",            "color": "#e67e22", "desc": "Using the camera"},
+    "mic":       {"icon": "&#xe31d;", "label": "Microphone",        "color": "#e74c3c", "desc": "Using the microphone"},
+    "tracking":  {"icon": "&#xef52;", "label": "Tracking",          "color": "#c0392b", "desc": "Identifying you for ads or analytics"},
+}
+
+ACTION_LABELS = {
+    # Network
+    "data_task":      "Sent a request",
+    "upload_task":    "Uploaded data",
+    "download_task":  "Downloaded data",
+    # File
+    "read":           "Read a file",
+    "write":          "Saved a file",
+    "delete":         "Deleted a file",
+    "copy":           "Copied a file",
+    # Keychain
+    "copy_matching":  "Read saved password",
+    "add":            "Saved new password",
+    "update":         "Updated saved password",
+    # Clipboard
+    "set_string":     "Copied text to clipboard",
+    "get_string":     "Read from clipboard",
+    "set_strings":    "Copied multiple items",
+    "set_image":      "Copied an image",
+    # Location
+    "start_updating":    "Started tracking location",
+    "start_significant": "Tracking significant location changes",
+    "req_when_in_use":   "Asked for location (while using app)",
+    "req_always":        "Asked for location (always)",
+    # Camera / Mic
+    "capture_start":  "Started recording",
+    "request_access": "Asked for permission",
+    # Tracking
+    "identifierForVendor":    "Read device ID",
+    "advertisingIdentifier":  "Read advertising ID",
+    "req_att_authorization":  "Asked to track you",
+    "check_att_status":       "Checked tracking permission",
+}
+
+
+def friendly_app_name(app_id, exe_name="", display_name=""):
+    """Use real display name from the app bundle, fall back to exe or bundle ID."""
+    if display_name and display_name != "" and display_name != "unknown":
+        return display_name
+    if exe_name and exe_name != "unknown" and exe_name != app_id:
+        return exe_name
+    # Strip common prefixes and use last component
+    parts = app_id.split(".")
+    if len(parts) >= 2:
+        name = parts[-1]
+        name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+        return name.title().replace("Ios", "iOS").replace("Mobilesafari", "Safari")
+    return app_id
+
+
+def friendly_detail(category, action, detail, extra_json):
+    """Make raw detail human-readable."""
+    if not detail:
+        return ""
+
+    extra = {}
+    if extra_json:
+        try:
+            extra = json.loads(extra_json)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if category == "network":
+        # "POST https://long-url..." → "apple.com" or "google.com"
+        host = extra.get("host", "")
+        if host:
+            # Shorten host: strip "www.", keep last 2-3 parts
+            host = re.sub(r"^www\.", "", host)
+            parts = host.split(".")
+            if len(parts) > 2 and parts[-2] in ("co", "com"):
+                host = ".".join(parts[-3:])
+            elif len(parts) > 2:
+                host = ".".join(parts[-2:])
+        method = detail.split(" ")[0] if " " in detail else ""
+        url = detail.split(" ", 1)[1] if " " in detail else detail
+        # Extract path (just first component)
+        try:
+            parsed = urlparse(url)
+            path = parsed.path.split("/")[1] if parsed.path and len(parsed.path.split("/")) > 1 else ""
+            if path and len(path) < 40:
+                return f"{host}/{path}" if host else detail[:80]
+            return host or detail[:80]
+        except Exception:
+            return host or detail[:80]
+
+    elif category == "file":
+        # Turn "/var/mobile/Library/Saved Application State/com.foo.bar.savedState/UUID/data.data"
+        # into something like "App State Data" or "Preferences"
+        path = detail
+        if "Saved Application State" in path:
+            return "App saved state"
+        elif "/Preferences/" in path:
+            fname = path.rsplit("/", 1)[-1]
+            return f"Preference: {fname}"
+        elif "/Caches/" in path:
+            return "Cache data"
+        elif "/Cookies/" in path:
+            return "Cookies"
+        elif "/WebKit/" in path:
+            return "Browser data"
+        elif "/tmp/" in path or "/Caches/" in path:
+            return "Temporary data"
+        elif "/Documents/" in path:
+            fname = path.rsplit("/", 1)[-1]
+            return f"Document: {fname}"
+        else:
+            # Show just the filename
+            fname = path.rsplit("/", 1)[-1]
+            if len(fname) > 40 or re.match(r"^[A-F0-9-]{36}", fname):
+                return "Internal data"
+            return fname
+
+    elif category == "keychain":
+        if detail:
+            # "com.matchstic.ReProvision" → "ReProvision credentials"
+            parts = detail.split(".")
+            name = parts[-1] if parts else detail
+            return f"{name} credentials"
+        return ""
+
+    elif category == "clipboard":
+        if extra.get("length"):
+            length = extra["length"]
+            if length > 500:
+                return f"Large text ({length} chars)"
+            elif detail:
+                return detail[:60]
+        return detail[:60] if detail else ""
+
+    elif category == "location":
+        return ""
+
+    elif category in ("camera", "mic"):
+        if detail and detail not in ("video", "audio"):
+            return detail
+        return ""
+
+    elif category == "tracking":
+        return ""
+
+    return detail[:80] if detail else ""
+
+
+def time_ago(ts):
+    """Convert timestamp to '2m ago' style."""
+    diff = time.time() - ts
+    if diff < 60:
+        return f"{int(diff)}s ago"
+    elif diff < 3600:
+        return f"{int(diff / 60)}m ago"
+    elif diff < 86400:
+        return f"{int(diff / 3600)}h ago"
+    else:
+        return f"{int(diff / 86400)}d ago"
+
+
+def cat_badge(category):
+    """Render a colored category badge."""
+    info = CATEGORY_INFO.get(category, {"icon": "", "label": category, "color": "#666"})
+    return (
+        f'<a href="/category/{esc(category)}" class="cat-badge" '
+        f'style="--cat-color:{info["color"]}">'
+        f'<span class="mi">{info["icon"]}</span>{info["label"]}</a>'
+    )
+
+
+def esc(s):
+    return html.escape(str(s)) if s else ""
+
+
+def events_table(events, show_app=True):
+    if not events:
+        return '<p class="empty">No activity recorded yet.</p>'
+    h = '<div class="events-list">'
+    for e in events:
+        ts = e["timestamp"]
+        cat = e["category"]
+        info = CATEGORY_INFO.get(cat, {"icon": "", "label": cat, "color": "#666"})
+        action_label = ACTION_LABELS.get(e["action"], e["action"].replace("_", " ").title())
+        detail = friendly_detail(cat, e["action"], e.get("detail"), e.get("extra_json"))
+        app_name = friendly_app_name(e["app_id"], e.get("exe_name", ""), e.get("display_name", ""))
+        time_str = time.strftime("%H:%M:%S", time.localtime(ts))
+
+        h += f'<div class="event-row" style="--cat-color:{info["color"]}">'
+        h += f'<div class="event-icon"><span class="mi">{info["icon"]}</span></div>'
+        h += '<div class="event-body">'
+        if show_app:
+            h += f'<span class="event-app"><a href="/app/{esc(e["app_id"])}">{esc(app_name)}</a></span> '
+        h += f'<span class="event-action">{esc(action_label)}</span>'
+        if detail:
+            h += f' <span class="event-detail">{esc(detail)}</span>'
+        h += f'</div>'
+        h += f'<div class="event-time">{time_str}</div>'
+        h += '</div>'
+    h += '</div>'
+    return h
+
+
+def pagination(base_url, page, total, per_page):
+    pages = max(1, (total + per_page - 1) // per_page)
+    if pages <= 1:
+        return ""
+    h = '<div class="pagination">'
+    if page > 1:
+        h += f'<a href="{base_url}page={page - 1}">Previous</a> '
+    h += f'<span class="page-info">Page {page} of {pages}</span> '
+    if page < pages:
+        h += f'<a href="{base_url}page={page + 1}">Next</a>'
+    h += "</div>"
+    return h
 
 
 class DashboardServer:
@@ -19,8 +245,6 @@ class DashboardServer:
         self.port = port
 
     def serve(self):
-        import socket as _socket
-
         class ReuseHTTPServer(HTTPServer):
             allow_reuse_address = True
             allow_reuse_port = True
@@ -34,13 +258,23 @@ class DashboardServer:
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):
-                pass  # Suppress access logs
+                pass
 
             def _query(self, sql, params=()):
                 with db_lock:
                     db.row_factory = sqlite3.Row
                     cur = db.execute(sql, params)
                     return [dict(r) for r in cur.fetchall()]
+
+            def _app_summaries(self):
+                return self._query(
+                    "SELECT e.app_id, "
+                    "(SELECT exe_name FROM events WHERE app_id = e.app_id ORDER BY id DESC LIMIT 1) AS exe_name, "
+                    "COALESCE((SELECT display_name FROM events WHERE app_id = e.app_id "
+                    "AND display_name NOT IN ('', 'unknown') ORDER BY id DESC LIMIT 1), '') AS display_name, "
+                    "COUNT(*) AS event_count, MAX(timestamp) AS last_seen "
+                    "FROM events e GROUP BY e.app_id ORDER BY event_count DESC"
+                )
 
             def _html(self, title, body):
                 self.send_response(200)
@@ -64,7 +298,7 @@ class DashboardServer:
                     if path == "/":
                         self._serve_index()
                     elif path.startswith("/app/"):
-                        app_id = path[5:]
+                        app_id = unquote(path[5:])
                         page = int(qs.get("page", ["1"])[0])
                         cat_filter = qs.get("cat", [None])[0]
                         self._serve_app(app_id, page, cat_filter)
@@ -97,43 +331,62 @@ class DashboardServer:
             # ── Pages ──
 
             def _serve_index(self):
-                apps = self._query(
-                    "SELECT app_id, COUNT(*) as cnt, MAX(timestamp) as last_seen "
-                    "FROM events GROUP BY app_id ORDER BY cnt DESC LIMIT 20"
-                )
+                apps = self._app_summaries()[:20]
                 cats = self._query(
                     "SELECT category, COUNT(*) as cnt FROM events GROUP BY category ORDER BY cnt DESC"
                 )
                 total = self._query("SELECT COUNT(*) as c FROM events")[0]["c"]
-                recent = self._query(
-                    "SELECT * FROM events ORDER BY id DESC LIMIT 10"
-                )
+                unique_apps = self._query("SELECT COUNT(DISTINCT app_id) as c FROM events")[0]["c"]
+                recent = self._query("SELECT * FROM events ORDER BY id DESC LIMIT 15")
 
-                body = f'<h2>Overview</h2><p>Total events: <b>{total:,}</b></p>'
-                body += '<div class="grid">'
+                # Header stats
+                body = '<div class="stats-bar">'
+                body += f'<div class="stat"><div class="stat-num">{unique_apps}</div><div class="stat-label">Apps Monitored</div></div>'
+                body += f'<div class="stat"><div class="stat-num">{total:,}</div><div class="stat-label">Activities Logged</div></div>'
+                cats_count = len(cats)
+                body += f'<div class="stat"><div class="stat-num">{cats_count}</div><div class="stat-label">Activity Types</div></div>'
+                body += '</div>'
+
+                # Category overview cards
+                body += '<h2>What apps are doing</h2>'
+                body += '<div class="cat-grid">'
+                for c in cats:
+                    cn = c["category"]
+                    info = CATEGORY_INFO.get(cn, {"icon": "", "label": cn, "color": "#666", "desc": ""})
+                    body += (
+                        f'<a href="/category/{esc(cn)}" class="cat-card" style="--cat-color:{info["color"]}">'
+                        f'<div class="cat-card-icon"><span class="mi">{info["icon"]}</span></div>'
+                        f'<div class="cat-card-body">'
+                        f'<div class="cat-card-label">{info["label"]}</div>'
+                        f'<div class="cat-card-count">{c["cnt"]:,} events</div>'
+                        f'<div class="cat-card-desc">{info["desc"]}</div>'
+                        f'</div></a>'
+                    )
+                body += '</div>'
 
                 # Top apps
-                body += '<div class="card"><h3>Top Apps</h3><table><tr><th>App</th><th>Events</th><th>Last Seen</th></tr>'
+                body += '<h2>Most Active Apps</h2>'
+                body += '<div class="app-list">'
                 for a in apps:
-                    ts = time.strftime("%H:%M:%S", time.localtime(a["last_seen"]))
-                    body += f'<tr><td><a href="/app/{esc(a["app_id"])}">{esc(a["app_id"])}</a></td><td>{a["cnt"]:,}</td><td>{ts}</td></tr>'
-                body += '</table></div>'
-
-                # Categories
-                body += '<div class="card"><h3>Categories</h3><table><tr><th>Category</th><th>Events</th></tr>'
-                for c in cats:
-                    body += f'<tr><td><a href="/category/{esc(c["category"])}">{esc(c["category"])}</a></td><td>{c["cnt"]:,}</td></tr>'
-                body += '</table></div>'
+                    name = friendly_app_name(a["app_id"], a.get("exe_name", ""), a.get("display_name", ""))
+                    ago = time_ago(a["last_seen"])
+                    body += (
+                        f'<a href="/app/{esc(a["app_id"])}" class="app-row">'
+                        f'<div class="app-name">{esc(name)}</div>'
+                        f'<div class="app-id">{esc(a["app_id"])}</div>'
+                        f'<div class="app-stats">{a["event_count"]:,} activities &middot; {ago}</div>'
+                        f'</a>'
+                    )
                 body += '</div>'
 
                 # Recent
-                body += '<h3>Recent Events</h3>'
+                body += '<h2>Recent Activity</h2>'
                 body += events_table(recent)
 
-                self._html("AppMon Dashboard", body)
+                self._html("Privacy Monitor", body)
 
             def _serve_app(self, app_id, page=1, cat_filter=None):
-                per_page = 500
+                per_page = 100
                 offset = (page - 1) * per_page
                 params = [app_id]
                 where = "app_id = ?"
@@ -147,72 +400,148 @@ class DashboardServer:
                 )
                 total = self._query(f"SELECT COUNT(*) as c FROM events WHERE {where}", params)[0]["c"]
                 cats = self._query(
-                    "SELECT DISTINCT category FROM events WHERE app_id = ?", (app_id,)
+                    "SELECT category, COUNT(*) as cnt FROM events WHERE app_id = ? GROUP BY category ORDER BY cnt DESC",
+                    (app_id,),
                 )
+                exe = self._query("SELECT exe_name FROM events WHERE app_id = ? ORDER BY id DESC LIMIT 1", (app_id,))
+                exe_name = exe[0]["exe_name"] if exe else ""
+                display = self._query("SELECT display_name FROM events WHERE app_id = ? AND display_name NOT IN ('', 'unknown') ORDER BY id DESC LIMIT 1", (app_id,))
+                dname = display[0]["display_name"] if display else ""
+                name = friendly_app_name(app_id, exe_name, dname)
 
-                body = f'<h2>{esc(app_id)}</h2><p>{total:,} events</p>'
-                body += '<div class="filters">Filter: <a href="/app/' + esc(app_id) + '">all</a> '
+                body = f'<h2>{esc(name)}</h2>'
+                body += f'<p class="subtitle">{esc(app_id)} &middot; {total:,} activities</p>'
+
+                # Category breakdown for this app
+                body += '<div class="filters">'
+                all_active = " active" if not cat_filter else ""
+                body += f'<a href="/app/{esc(app_id)}" class="filter-btn{all_active}">All</a> '
                 for c in cats:
                     cn = c["category"]
-                    active = " class='active'" if cn == cat_filter else ""
-                    body += f'<a href="/app/{esc(app_id)}?cat={esc(cn)}"{active}>{esc(cn)}</a> '
+                    info = CATEGORY_INFO.get(cn, {"label": cn, "color": "#666"})
+                    active = " active" if cn == cat_filter else ""
+                    body += f'<a href="/app/{esc(app_id)}?cat={esc(cn)}" class="filter-btn{active}" style="--cat-color:{info["color"]}">{info["label"]} ({c["cnt"]})</a> '
                 body += '</div>'
-                body += events_table(events)
+
+                body += events_table(events, show_app=False)
                 body += pagination(f"/app/{app_id}" + (f"?cat={cat_filter}&" if cat_filter else "?"), page, total, per_page)
-                self._html(f"App: {app_id}", body)
+                self._html(f"{name} — Privacy Monitor", body)
 
             def _serve_category(self, cat, page=1):
-                per_page = 500
+                per_page = 100
                 offset = (page - 1) * per_page
+                info = CATEGORY_INFO.get(cat, {"icon": "", "label": cat, "color": "#666", "desc": ""})
                 events = self._query(
                     "SELECT * FROM events WHERE category = ? ORDER BY id DESC LIMIT ? OFFSET ?",
                     (cat, per_page, offset),
                 )
                 total = self._query("SELECT COUNT(*) as c FROM events WHERE category = ?", (cat,))[0]["c"]
 
-                body = f'<h2>Category: {esc(cat)}</h2><p>{total:,} events</p>'
+                body = f'<h2>{info["label"]}</h2>'
+                body += f'<p class="subtitle">{info["desc"]} &middot; {total:,} total</p>'
                 body += events_table(events)
                 body += pagination(f"/category/{cat}?", page, total, per_page)
-                self._html(f"Category: {cat}", body)
+                self._html(f"{info['label']} — Privacy Monitor", body)
 
             def _serve_live(self):
-                body = '<h2>Live Feed</h2><div id="live"></div>'
+                body = '<h2>Live Activity</h2>'
+                body += '<p class="subtitle">Auto-updates every 3 seconds</p>'
+                body += '<div id="live"><p class="empty">Loading...</p></div>'
                 body += '''<script>
-                function refresh() {
-                    fetch("/api/events?limit=50")
-                        .then(r => r.json())
-                        .then(data => {
-                            let h = "<table><tr><th>Time</th><th>App</th><th>Cat</th><th>Action</th><th>Detail</th></tr>";
-                            data.forEach(e => {
-                                let t = new Date(e.timestamp * 1000).toLocaleTimeString();
-                                let d = (e.detail || "").substring(0, 120);
-                                h += `<tr><td>${t}</td><td><a href="/app/${e.app_id}">${e.app_id}</a></td>`;
-                                h += `<td><a href="/category/${e.category}">${e.category}</a></td>`;
-                                h += `<td>${e.action}</td><td class="detail">${d}</td></tr>`;
-                            });
-                            h += "</table>";
-                            document.getElementById("live").innerHTML = h;
-                        });
-                }
-                refresh();
-                setInterval(refresh, 3000);
-                </script>'''
-                self._html("Live Feed", body)
+const CAT = ''' + json.dumps({k: {"icon": v["icon"], "label": v["label"], "color": v["color"]} for k, v in CATEGORY_INFO.items()}) + ''';
+const ACT = ''' + json.dumps(ACTION_LABELS) + ''';
+
+function escapeHTML(value) {
+    const node = document.createElement("span");
+    node.textContent = value == null ? "" : String(value);
+    return node.innerHTML;
+}
+
+function appName(id, exe, displayName) {
+    if (displayName && displayName !== "unknown") return displayName;
+    if (exe && exe !== "unknown" && exe !== id) return exe;
+    let p = id.split(".");
+    if (p.length >= 2) {
+        let n = p[p.length-1];
+        return n.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, s=>s.toUpperCase());
+    }
+    return id;
+}
+
+function friendlyDetail(cat, act, detail, extra) {
+    if (!detail) return "";
+    let ex = {};
+    try { if (extra) ex = JSON.parse(extra); } catch(e) {}
+    if (cat === "network") return ex.host ? ex.host.replace(/^www\\./, "") : "";
+    if (cat === "file") {
+        if (detail.includes("Saved Application State")) return "App saved state";
+        if (detail.includes("/Preferences/")) return "Preference: " + detail.split("/").pop();
+        if (detail.includes("/Caches/")) return "Cache data";
+        if (detail.includes("/Cookies/")) return "Cookies";
+        let fn = detail.split("/").pop();
+        if (fn.length > 36 || /^[A-F0-9-]{36}/.test(fn)) return "Internal data";
+        return fn;
+    }
+    if (cat === "keychain") {
+        let p = detail.split(".");
+        return p[p.length-1] + " credentials";
+    }
+    if (cat === "clipboard") return detail.substring(0, 60);
+    return "";
+}
+
+function refresh() {
+    fetch("/api/events?limit=50")
+        .then(r => r.json())
+        .then(data => {
+            if (!data.length) {
+                document.getElementById("live").innerHTML = '<p class="empty">No activity yet. Open some apps!</p>';
+                return;
+            }
+            let h = '<div class="events-list">';
+            data.forEach(e => {
+                let c = CAT[e.category] || {icon:"", label:e.category, color:"#666"};
+                let act = ACT[e.action] || e.action.replace(/_/g, " ");
+                let detail = friendlyDetail(e.category, e.action, e.detail, e.extra_json);
+                let name = escapeHTML(appName(e.app_id, e.exe_name, e.display_name));
+                let t = new Date(e.timestamp * 1000).toLocaleTimeString();
+                h += `<div class="event-row" style="--cat-color:${c.color}">`;
+                h += `<div class="event-icon"><span class="mi">${c.icon}</span></div>`;
+                h += `<div class="event-body">`;
+                h += `<span class="event-app"><a href="/app/${encodeURIComponent(e.app_id)}">${name}</a></span> `;
+                h += `<span class="event-action">${escapeHTML(act)}</span>`;
+                if (detail) h += ` <span class="event-detail">${escapeHTML(detail)}</span>`;
+                h += `</div><div class="event-time">${t}</div></div>`;
+            });
+            h += "</div>";
+            document.getElementById("live").innerHTML = h;
+        });
+}
+refresh();
+setInterval(refresh, 3000);
+</script>'''
+                self._html("Live Activity — Privacy Monitor", body)
 
             def _serve_search(self, q):
                 results = []
                 if q:
+                    matching_actions = [action for action, label in ACTION_LABELS.items() if q.casefold() in label.casefold()]
                     results = self._query(
-                        "SELECT * FROM events WHERE detail LIKE ? ORDER BY id DESC LIMIT 200",
-                        (f"%{q}%",),
+                        "SELECT * FROM events WHERE detail LIKE ? OR app_id LIKE ? OR exe_name LIKE ? "
+                        "OR display_name LIKE ? OR action LIKE ? OR action IN ("
+                        + ",".join("?" for _ in matching_actions) + ") ORDER BY id DESC LIMIT 200",
+                        [f"%{q}%"] * 5 + matching_actions,
                     )
-                body = f'<h2>Search</h2>'
-                body += f'<form method="get" action="/search"><input name="q" value="{esc(q)}" placeholder="Search details..." style="width:300px;padding:8px;background:#333;color:#eee;border:1px solid #555;border-radius:4px"> '
-                body += '<button type="submit" style="padding:8px 16px;background:#4a9eff;color:#fff;border:none;border-radius:4px;cursor:pointer">Search</button></form>'
+                body = '<h2>Search</h2>'
+                body += (
+                    f'<form method="get" action="/search" class="search-form">'
+                    f'<input name="q" value="{esc(q)}" placeholder="Search by app name, website, action...">'
+                    f'<button type="submit">Search</button></form>'
+                )
                 if q:
-                    body += f'<p>{len(results)} results for "{esc(q)}"</p>'
+                    body += f'<p class="subtitle">{len(results)} results for "{esc(q)}"</p>'
                     body += events_table(results)
-                self._html("Search", body)
+                self._html("Search — Privacy Monitor", body)
 
             # ── JSON API ──
 
@@ -234,10 +563,7 @@ class DashboardServer:
                 self._json_resp(rows)
 
             def _api_apps(self):
-                rows = self._query(
-                    "SELECT app_id, COUNT(*) as event_count, MAX(timestamp) as last_seen "
-                    "FROM events GROUP BY app_id ORDER BY event_count DESC"
-                )
+                rows = self._app_summaries()
                 self._json_resp(rows)
 
             def _api_stats(self):
@@ -249,74 +575,103 @@ class DashboardServer:
         return Handler
 
 
-def esc(s):
-    return html.escape(str(s)) if s else ""
-
-
-def events_table(events):
-    if not events:
-        return "<p>No events.</p>"
-    h = '<table><tr><th>Time</th><th>PID</th><th>App</th><th>Cat</th><th>Action</th><th>Detail</th></tr>'
-    for e in events:
-        ts = time.strftime("%m-%d %H:%M:%S", time.localtime(e["timestamp"]))
-        detail = esc((e.get("detail") or "")[:120])
-        h += (
-            f'<tr><td>{ts}</td><td>{e["pid"]}</td>'
-            f'<td><a href="/app/{esc(e["app_id"])}">{esc(e["app_id"])}</a></td>'
-            f'<td><a href="/category/{esc(e["category"])}">{esc(e["category"])}</a></td>'
-            f'<td>{esc(e["action"])}</td><td class="detail">{detail}</td></tr>'
-        )
-    h += "</table>"
-    return h
-
-
-def pagination(base_url, page, total, per_page):
-    pages = max(1, (total + per_page - 1) // per_page)
-    if pages <= 1:
-        return ""
-    h = '<div class="pagination">'
-    if page > 1:
-        h += f'<a href="{base_url}page={page - 1}">&laquo; Prev</a> '
-    h += f'Page {page}/{pages} '
-    if page < pages:
-        h += f'<a href="{base_url}page={page + 1}">Next &raquo;</a>'
-    h += "</div>"
-    return h
-
-
 PAGE_TEMPLATE = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>{title}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=ad_group_off,camera,content_paste,description,fingerprint,key,language,location_on,mic,network_check,public,security,shield,visibility&display=swap">
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:-apple-system,system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:12px;font-size:14px}}
-a{{color:#4a9eff;text-decoration:none}}
-a:hover{{text-decoration:underline}}
-h2{{color:#fff;margin:12px 0 8px}}
-h3{{color:#ccc;margin:10px 0 6px}}
-p{{margin:4px 0 8px}}
-nav{{background:#16213e;padding:10px 16px;margin:-12px -12px 12px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}}
-nav a{{color:#8ab4f8;font-weight:500}}
-nav .brand{{color:#fff;font-weight:700;font-size:16px}}
-table{{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}}
-th,td{{padding:6px 8px;text-align:left;border-bottom:1px solid #2a2a4a}}
-th{{background:#16213e;color:#8ab4f8;position:sticky;top:0}}
-tr:hover{{background:#16213e44}}
-.detail{{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#aaa;font-family:monospace;font-size:12px}}
-.grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
-@media(max-width:600px){{.grid{{grid-template-columns:1fr}}}}
-.card{{background:#16213e;border-radius:8px;padding:12px}}
-.filters a{{display:inline-block;padding:4px 10px;margin:2px;background:#2a2a4a;border-radius:12px;font-size:12px}}
-.filters a.active{{background:#4a9eff;color:#fff}}
-.pagination{{margin:12px 0;text-align:center}}
-.pagination a{{padding:6px 12px;background:#2a2a4a;border-radius:4px;margin:0 4px}}
+:root{{--bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#6e7681;--accent:#58a6ff}}
+body{{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px;-webkit-text-size-adjust:100%;padding-bottom:40px}}
+a{{color:var(--accent);text-decoration:none}}
+a:active{{opacity:0.7}}
+
+/* Nav */
+nav{{background:var(--surface);padding:14px 16px;display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);background:rgba(22,27,34,0.85)}}
+nav .brand{{font-weight:700;font-size:17px;color:#fff;margin-right:auto}}
+nav a{{color:var(--text2);font-size:14px;font-weight:500;padding:6px 10px;border-radius:8px}}
+nav a:hover,nav a:active{{color:#fff;background:var(--surface2)}}
+
+/* Content */
+.content{{max-width:800px;margin:0 auto;padding:0 16px}}
+h2{{color:#fff;font-size:20px;font-weight:700;margin:24px 0 8px;letter-spacing:-0.3px}}
+.subtitle{{color:var(--text2);font-size:13px;margin-bottom:12px}}
+.empty{{color:var(--text3);text-align:center;padding:40px 16px;font-size:15px}}
+
+/* Stats bar */
+.stats-bar{{display:flex;gap:1px;margin:16px 0;background:var(--border);border-radius:12px;overflow:hidden}}
+.stat{{flex:1;background:var(--surface);padding:16px 12px;text-align:center}}
+.stat:first-child{{border-radius:12px 0 0 12px}}
+.stat:last-child{{border-radius:0 12px 12px 0}}
+.stat-num{{font-size:24px;font-weight:700;color:#fff}}
+.stat-label{{font-size:11px;color:var(--text2);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px}}
+
+/* Category grid */
+.cat-grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 20px}}
+.cat-card{{display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface);border-radius:12px;border:1px solid var(--border);transition:border-color 0.15s}}
+.cat-card:active{{border-color:var(--cat-color)}}
+.cat-card-icon{{width:40px;height:40px;border-radius:10px;background:color-mix(in srgb,var(--cat-color) 15%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}}
+.cat-card-icon .mi{{color:var(--cat-color);font-size:20px}}
+.cat-card-label{{font-weight:600;font-size:14px;color:#fff}}
+.cat-card-count{{font-size:12px;color:var(--text2)}}
+.cat-card-desc{{font-size:11px;color:var(--text3);margin-top:1px}}
+
+/* App list */
+.app-list{{margin:8px 0 20px}}
+.app-row{{display:block;padding:12px 14px;background:var(--surface);border-radius:10px;margin-bottom:6px;border:1px solid var(--border)}}
+.app-row:active{{border-color:var(--accent)}}
+.app-name{{font-weight:600;font-size:15px;color:#fff}}
+.app-id{{font-size:11px;color:var(--text3);font-family:"SF Mono",Menlo,monospace;margin-top:1px}}
+.app-stats{{font-size:12px;color:var(--text2);margin-top:3px}}
+
+/* Events list */
+.events-list{{margin:8px 0}}
+.event-row{{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border)}}
+.event-icon{{width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--cat-color) 12%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}}
+.event-icon .mi{{color:var(--cat-color);font-size:16px}}
+.event-body{{flex:1;min-width:0}}
+.event-app a{{font-weight:600;font-size:14px;color:#fff}}
+.event-action{{font-size:13px;color:var(--text)}}
+.event-detail{{font-size:12px;color:var(--text2);display:block;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.event-time{{font-size:11px;color:var(--text3);flex-shrink:0;padding-top:2px;min-width:58px;text-align:right}}
+
+/* Filters */
+.filters{{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}}
+.filter-btn{{display:inline-block;padding:6px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:13px;color:var(--text2);font-weight:500}}
+.filter-btn.active{{background:color-mix(in srgb,var(--cat-color,var(--accent)) 20%,transparent);border-color:var(--cat-color,var(--accent));color:#fff}}
+
+/* Category badges */
+.cat-badge{{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:500;background:color-mix(in srgb,var(--cat-color) 15%,transparent);color:var(--cat-color)}}
+
+/* Search */
+.search-form{{display:flex;gap:8px;margin:12px 0}}
+.search-form input{{flex:1;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none}}
+.search-form input:focus{{border-color:var(--accent)}}
+.search-form button{{padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}}
+
+/* Pagination */
+.pagination{{display:flex;justify-content:center;align-items:center;gap:12px;margin:20px 0;padding:12px}}
+.pagination a{{padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);font-weight:500}}
+.page-info{{font-size:13px;color:var(--text2)}}
+
+/* Material icons via codepoints */
+.mi{{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:20px;display:inline-block;line-height:1;text-transform:none;letter-spacing:normal;word-wrap:normal;white-space:nowrap;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}}
+
+@media(max-width:500px){{
+    .cat-grid{{grid-template-columns:1fr}}
+    .stats-bar{{flex-direction:column}}
+    .stat:first-child,.stat:last-child{{border-radius:0}}
+    .stat:first-child{{border-radius:12px 12px 0 0}}
+    .stat:last-child{{border-radius:0 0 12px 12px}}
+}}
 </style></head><body>
 <nav>
-<span class="brand">AppMon</span>
-<a href="/">Overview</a>
+<span class="brand">Privacy Monitor</span>
+<a href="/">Home</a>
 <a href="/live">Live</a>
 <a href="/search">Search</a>
-<a href="/api/stats">API</a>
 </nav>
+<div class="content">
 {body}
+</div>
 </body></html>"""

@@ -45,6 +45,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             pid INTEGER NOT NULL,
             app_id TEXT NOT NULL,
             exe_name TEXT NOT NULL,
+            display_name TEXT DEFAULT '',
             category TEXT NOT NULL,
             action TEXT NOT NULL,
             detail TEXT,
@@ -65,6 +66,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
         );
     """)
     conn.commit()
+    # Migrate: add display_name column if missing
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(events)").fetchall()]
+    if "display_name" not in cols:
+        conn.execute("ALTER TABLE events ADD COLUMN display_name TEXT DEFAULT ''")
+        conn.commit()
     return conn
 
 
@@ -121,11 +127,12 @@ class Collector:
             pid = evt.get("pid", 0)
             app = evt.get("app", "unknown")
             exe = evt.get("exe", "unknown")
+            name = evt.get("name", "")
             cat = evt.get("cat", "unknown")
             act = evt.get("act", "unknown")
             detail = evt.get("detail")
             extra = evt.get("extra")
-            rows.append((ts, pid, app, exe, cat, act, detail, extra))
+            rows.append((ts, pid, app, exe, name, cat, act, detail, extra))
 
             hour = time.strftime("%Y-%m-%d-%H", time.gmtime(ts))
             key = (app, cat, hour)
@@ -134,8 +141,8 @@ class Collector:
         with self.db_lock:
             try:
                 self.db.executemany(
-                    "INSERT INTO events (timestamp, pid, app_id, exe_name, category, action, detail, extra_json) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO events (timestamp, pid, app_id, exe_name, display_name, category, action, detail, extra_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     rows,
                 )
                 for (app, cat, hour), count in summary_updates.items():

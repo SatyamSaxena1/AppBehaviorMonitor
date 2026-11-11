@@ -25,6 +25,7 @@ static int g_sock = -1;
 static struct sockaddr_un g_addr;
 static NSString *g_appId = nil;
 static NSString *g_exeName = nil;
+static NSString *g_displayName = nil;
 
 // Rate limiting: per-category token bucket
 static NSMutableDictionary<NSString *, NSNumber *> *g_rateCounts;
@@ -74,6 +75,7 @@ static void sendEvent(NSString *category, NSString *action, NSString *detail, NS
     evt[@"pid"] = @(getpid());
     evt[@"app"] = g_appId ?: @"unknown";
     evt[@"exe"] = g_exeName ?: @"unknown";
+    evt[@"name"] = g_displayName ?: @"";
     evt[@"cat"] = category;
     evt[@"act"] = action;
     if (detail) evt[@"detail"] = detail;
@@ -345,6 +347,10 @@ static OSStatus hooked_SecItemDelete(CFDictionaryRef query) {
         // Identify app
         g_appId = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
         g_exeName = [[[NSProcessInfo processInfo] processName] copy] ?: @"unknown";
+
+        // Get display name: CFBundleDisplayName > CFBundleName > process name
+        NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
+        g_displayName = info[@"CFBundleDisplayName"] ?: info[@"CFBundleName"] ?: g_exeName;
 
         // Rate limiting
         g_rateCounts = [NSMutableDictionary dictionary];

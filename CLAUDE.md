@@ -1,0 +1,1 @@
+Read AGENTS.md and docs/SESSION_HANDOFF.md before continuing. Maintain the shared handoff and back up meaningful progress to this repository. Preserve the original device's global Claude protocols when working there.
