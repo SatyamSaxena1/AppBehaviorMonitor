@@ -139,3 +139,8 @@ MCP successfully registered with both local clients via supported CLI commands, 
 User then requested a portfolio timeline entry and promotion as a new project with an opposing palette. Added a homepage announcement and warm ivory/amber/coral feature card, a November 2026 timeline entry, and `privacy-monitor/index.html` with the project story, beta installation, and optional MCP explanation. Scoped CSS: `assets/css/privacy-monitor.css`; architecture illustration: `assets/projects/privacy-monitor.svg`. This contrasts with the portfolio's violet/blue palette without globally recoloring existing projects. The repository landing page and its generator use the same warm palette and link to the story. No private event screenshots or invented performance/security claims are used.
 
 Static validation passed for both pages: local links, duplicate IDs, a single h1, SVG parsing, and presence of dark/light and mobile styles. Automated browser rendering was not available. Native UI and clean root installation remain beta verification work. Latest website changes should be pushed despite the external outage so Pages can deploy when service resumes.
+
+
+## Live deployment verified after GitHub recovery
+
+GitHub Actions and Pages report operational. Pages deployment for website commit `bbf9820` completed successfully, as did the website Tests workflow. Public Release, Packages, Packages.gz, manifest, and all three deb downloads were verified; package sizes and SHA-256 hashes match manifest.json. The live project page and homepage timeline were also checked. Sileo source is now ready: https://satyamsaxena1.github.io/repo/ . Actual fresh-device installation remains beta testing; successful hosting is not a clean-install claim.
