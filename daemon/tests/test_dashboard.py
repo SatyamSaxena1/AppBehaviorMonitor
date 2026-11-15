@@ -118,8 +118,16 @@ class MonitorTests(unittest.TestCase):
         self.assertIn('0 results', self.get('/search?q=no-such-value'))
 
     def test_routes_filters_and_live_name_propagation(self):
-        for path in ('/app/test.planner?cat=network', '/category/network', '/api/stats', '/api/insights', '/live'):
+        for path in ('/app/test.planner?cat=network', '/category/network', '/api/stats', '/api/activity', '/live'):
             self.get(path)
+        with self.assertRaises(HTTPError) as error:
+            self.get('/api/insights')
+        self.assertEqual(error.exception.code,404)
+        error.exception.close()
+        with self.assertRaises(HTTPError) as error:
+            self.get('/api/activity?hours=25')
+        self.assertEqual(error.exception.code,400)
+        error.exception.close()
         events = json.loads(self.get('/api/events?cat=network&app=test.planner'))
         self.assertEqual(len(events), 3)
         self.assertEqual(events[1]['display_name'], 'My Planner')

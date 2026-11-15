@@ -4,7 +4,7 @@ import argparse, datetime, email.utils, gzip, hashlib, json, os, plistlib, shuti
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.1.0~beta2'
+VERSION = '1.2.0~beta1'
 URL = 'https://satyamsaxena1.github.io/repo/'
 ENV = dict(os.environ, PATH='/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/usr/sbin:/usr/bin:/bin', LC_ALL='C')
 DPKG = '/var/jb/usr/bin/dpkg-deb'
@@ -38,8 +38,8 @@ def build(output):
     run(DPKG, '-R', ROOT/'native/build/PrivacyMonitor-App.deb', native)
     infofile = native/'var/jb/Applications/PrivacyMonitor.app/Info.plist'
     info = plistlib.loads(infofile.read_bytes())
-    info['CFBundleShortVersionString'] = '1.1.0'
-    info['CFBundleVersion'] = '5'
+    info['CFBundleShortVersionString'] = '1.2.0'
+    info['CFBundleVersion'] = '6'
     infofile.write_bytes(plistlib.dumps(info))
     # Info.plist is part of the signed app; re-sign after changing it.
     run('/var/jb/usr/bin/ldid', '-S', infofile.parent/'PrivacyMonitor')
@@ -60,11 +60,10 @@ def build(output):
     collector = work/'collector'
     libexec = collector/'var/jb/usr/libexec/privacy-monitor'
     libexec.mkdir(parents=True)
-    for file in ['collector.py', 'dashboard.py', 'insight_store.py']:
+    for file in ['collector.py', 'dashboard.py', 'activity_rules.py']:
         shutil.copy2(ROOT/'daemon'/file, libexec/file)
-    for file in ['mcp_server.py', 'launch']:
-        target = 'launch-mcp' if file == 'launch' else file
-        shutil.copy2(ROOT/'privacy-monitor-ai/server'/file, libexec/target)
+    # Replace the old launcher during upgrades, including stale client registrations.
+    write(libexec/'launch-mcp', '#!/var/jb/bin/sh\nprintf "%s\\n" "Privacy Monitor MCP has been removed. Use the app." >&2\nexit 1\n', 0o755)
     write(libexec/'launch', '''#!/var/jb/bin/sh
 set -eu
 umask 077
@@ -140,14 +139,14 @@ exit 0
     depiction={'class':'DepictionTabView','minVersion':'0.1','tabs':[{'class':'DepictionStackView','tabname':'Details','views':[
       {'class':'DepictionHeaderView','title':'Privacy Monitor · Beta'},
       {'class':'DepictionSubheaderView','title':'See what apps do on your iPhone.'},
-      {'class':'DepictionMarkdownView','markdown':'AI Insights app, activity collector, and monitoring engine. Install **Privacy Monitor** to get all three.\n\n**Compatibility:** Dopamine rootless; tested engine on iPhone 13 Pro Max / iOS 15.5. Native app launch and clean-device installation are still awaiting beta verification. Other devices are unverified.\n\n**After installing:** restart apps to load the engine; use the package manager’s Restart SpringBoard action if needed. In Choicy, exclude apps that become unstable.\n\nHistory stays on the phone and is retained for seven days. Supported hooks are observations, not proof of misuse. The optional AI connector reads metadata and saves requested reviews with real event evidence; it cannot alter recorded events or monitoring settings.\n\n[Source and issues](https://github.com/SatyamSaxena1/AppBehaviorMonitor)'}]}]}
+      {'class':'DepictionMarkdownView','markdown':'Visual activity app, local rules, collector, and monitoring engine. Install **Privacy Monitor** to get all three.\n\n**Compatibility:** Dopamine rootless; tested engine on iPhone 13 Pro Max / iOS 15.5. Native app launch and clean-device installation are still awaiting beta verification. Other devices are unverified.\n\n**After installing:** restart apps to load the engine; use the package manager’s Restart SpringBoard action if needed. In Choicy, exclude apps that become unstable.\n\nHistory stays on the phone and is retained for seven days. Supported hooks are observations, not proof of misuse. Local rules calculate summaries from recorded calls. Version 1.2 removes the AI/MCP connector. No AI account is needed.\n\n[Source and issues](https://github.com/SatyamSaxena1/AppBehaviorMonitor)'}]}]}
     write(output/'depiction.json',json.dumps(depiction,indent=2)+'\n')
     write(output/'manifest.json',json.dumps(dict(version=VERSION,packages=assets),indent=2)+'\n')
     write(output/'index.html','''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy Monitor · Jailbreak Repo</title>
 <style>body{max-width:660px;margin:12vh auto;padding:24px;background:#fff0dc;color:#351d12;font:18px/1.65 system-ui}img{width:90px;border-radius:22px}a{color:#9e371c}.button{display:inline-block;padding:12px 20px;border:1px solid #b36a42;border-radius:12px;margin:8px 8px 8px 0}code{overflow-wrap:anywhere}small{color:#70503d}</style>
-<img src="icon.png" alt="Privacy Monitor shield"><h1>Your apps. A clearer view.</h1><p><a href="../privacy-monitor/">Read the project story →</a></p><p>Privacy Monitor puts AI reviews first: plain-language findings, recorded evidence, and practical next steps. Developer Mode retains the raw activity tools. Reviews are saved by an assistant when you ask, not generated silently.</p>
+<img src="icon.png" alt="Privacy Monitor shield"><h1>Your apps. A clearer view.</h1><p><a href="../privacy-monitor/">Read the project story →</a></p><p>Privacy Monitor shows current app activity with visual counters, category charts, and local rules. Browse apps and seven days of history. Developer Mode retains raw activity tools. No AI account or MCP connection is needed.</p>
 <p><a class="button" href="sileo://source/https://satyamsaxena1.github.io/repo/">Add to Sileo</a><a class="button" href="zbra://sources/add/https://satyamsaxena1.github.io/repo/">Add to Zebra</a></p>
-<p>Or add this source manually:<br><code>https://satyamsaxena1.github.io/repo/</code></p><p><a class="button" href="../privacy-monitor/#connect">Connect Claude / Codex</a></p><h2>Install Privacy Monitor</h2><p>Sileo installs the native app, engine, collector, and Python dependency together. Reopen apps after installation so the engine can load. Use Choicy to exclude sensitive or unstable apps.</p>
+<p>Or add this source manually:<br><code>https://satyamsaxena1.github.io/repo/</code></p><h2>Install Privacy Monitor</h2><p>Sileo installs the native app, engine, collector, and Python dependency together. Reopen apps after installation so the engine can load. Use Choicy to exclude sensitive or unstable apps.</p>
 <h2>Public beta</h2><p>For Dopamine rootless. The engine has been tested on iPhone 13 Pro Max with iOS 15.5. Native app launch and installation on a clean device are not yet verified; other devices and jailbreak types are unverified.</p><p>Recorded activity is not a verdict that an app is malicious. History stays on your device and is retained for seven days. Uninstalling preserves history.</p>
 <p><a href="https://github.com/SatyamSaxena1/AppBehaviorMonitor">Source, support &amp; issues</a> · <a href="manifest.json">Package checksums</a></p><small>Beta repository. Package indexes are currently unsigned; downloads have SHA-256 checksums. No accounts or hosted activity collection.</small></html>''')
     validate(output)

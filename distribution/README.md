@@ -7,7 +7,7 @@ Host: `https://satyamsaxena1.github.io/repo/`, from the `repo/` directory of
 
 - `com.appmon.native`: native app; depends on engine and collector.
 - `com.appmon.tweak`: signed rootless engine; depends on collector and MobileSubstrate.
-- `com.appmon.collector`: Python sources, rootless launch wrapper, LaunchDaemon, and optional metadata-and-insight MCP stdio server. Depends on Procursus Python 3.9+ or the existing CyPwn Python 3.14 package.
+- `com.appmon.collector`: Python sources, rootless launch wrapper, LaunchDaemon, and deterministic local summary rules. Depends on Procursus Python 3.9+ or the existing CyPwn Python 3.14 package.
 
 Collector installation registers a mobile-user service under the existing
 `com.appmon.collector` label, replacing a manually installed service on upgrades.
@@ -45,10 +45,10 @@ release rather than claiming these indexes have an authenticated signature.
    deb and compare its size and SHA-256 with manifest.json.
 
 Current release is explicitly a beta. Engine testing: iPhone 13 Pro Max/iOS 15.5.
-The extracted collector has passed isolated startup, socket ingestion, HTTP, MCP,
+The extracted collector has passed isolated startup, socket ingestion, HTTP, local rules,
 and shutdown checks. APT simulation resolves the three packages on the development
 device. Actual clean-device root installation, native UI launch, and other iOS/jailbreak
 combinations remain unverified; source compatibility is not a claim of testing.
 
-The MCP connector is optional and does not start a network listener or upload data.
-See ../privacy-monitor-ai/README.md to connect a local/SSH stdio client.
+Version 1.2 retires MCP. The old launcher is replaced with a disabled stub during upgrades.
+Local summaries use activity_rules.py and /api/activity; no AI account is needed.

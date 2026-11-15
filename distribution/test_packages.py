@@ -31,20 +31,13 @@ with tempfile.TemporaryDirectory(prefix='appmon-test-',dir='/var/jb/tmp') as tem
         assert events[0]['display_name']=='Fixture App'
         assert get('/api/apps')[0]['event_count']==1
         assert get('/api/health')['activity']=='recent'
-        messages=[dict(jsonrpc='2.0',id=1,method='tools/call',params=dict(name='contacted_domains',arguments={}))]
-        mcp=collector.with_name('mcp_server.py')
-        output=subprocess.run([sys.executable,str(mcp),'--db',str(Path(temp)/'appmon.db')],input=json.dumps(messages[0])+'\n',capture_output=True,text=True,check=True)
-        result=json.loads(output.stdout)['result']
-        assert not result['isError']
-        assert 'example.test' in result['content'][0]['text']
-        review=dict(analysis_id='package-smoke',title='A supported request was observed',summary='One fixture event was recorded.',observations=['The test app made a network request.'],interpretation='This verifies collection, not app safety.',recommendations=['Use real evidence when reviewing apps.'],limitations='Synthetic test only.',confidence='high',priority='context',author='Test harness',evidence_ids=[events[0]['id']],hours=24)
-        call=dict(jsonrpc='2.0',id=2,method='tools/call',params=dict(name='publish_insight',arguments=review))
-        saved=subprocess.run([sys.executable,str(mcp),'--db',str(Path(temp)/'appmon.db')],input=json.dumps(call)+'\n',capture_output=True,text=True,check=True)
-        assert not json.loads(saved.stdout)['result']['isError'],saved.stdout
-        insights=get('/api/insights')['insights']
-        assert len(insights)==1 and insights[0]['evidence'][0]['domain']=='example.test'
-        assert insights[0]['observations']==review['observations']
-        print('Packaged collector: startup, ingestion, HTTP, MCP read/write, and insight read-back passed.')
+        activity=get('/api/activity?hours=24')
+        assert activity['total']==1 and activity['app_count']==1
+        assert activity['apps'][0]['name']=='Fixture App'
+        assert sum(b['count'] for b in activity['history'])==1
+        assert activity['categories'][0]['id']=='network'
+        assert not collector.with_name('mcp_server.py').exists()
+        print('Packaged collector: startup, ingestion, HTTP, local rules, and exact history passed.')
     finally:
         process.terminate()
         out,err=process.communicate(timeout=10)

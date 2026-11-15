@@ -1,5 +1,4 @@
 #import <UIKit/UIKit.h>
-#import "MCPSetupController.h"
 #import "InsightsUI.h"
 
 static NSDictionary *Categories(void) {
@@ -217,8 +216,8 @@ UIViewController *PMActivityScreen(BOOL apps) {
 - (void)configureTabs:(BOOL)settings {
     BOOL developer = [NSUserDefaults.standardUserDefaults boolForKey:@"PMDeveloperMode"];
     NSMutableArray *screens = [NSMutableArray arrayWithArray:@[[PMHomeController new], [PMInsightsController new], [PMHistoryController new]]];
-    NSMutableArray *titles = [NSMutableArray arrayWithArray:@[@"Overview", @"Insights", @"History"]];
-    NSMutableArray *icons = [NSMutableArray arrayWithArray:@[@"house.fill", @"sparkles", @"clock.arrow.circlepath"]];
+    NSMutableArray *titles = [NSMutableArray arrayWithArray:@[@"Today", @"Apps", @"History"]];
+    NSMutableArray *icons = [NSMutableArray arrayWithArray:@[@"chart.pie.fill", @"square.grid.2x2.fill", @"clock.arrow.circlepath"]];
     if (developer) {
         [screens addObject:[[PMDeveloperController alloc] initWithStyle:UITableViewStyleInsetGrouped]];
         [titles addObject:@"Developer"]; [icons addObject:@"wrench.and.screwdriver"];

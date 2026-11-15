@@ -97,13 +97,14 @@ The dashboard uses no external icon fonts. **Live** updates every three seconds 
 
 Health endpoint: `/api/health`. Regression checks: `python3 -m unittest discover -s daemon/tests -v` (on this device, use `/var/jb/usr/local/bin/python3.14`). Shared development state is in `docs/SESSION_HANDOFF.md`.
 
-## Sileo distribution and optional AI analysis
+## Sileo distribution and local summaries
 
-The beta repository is hosted at **https://satyamsaxena1.github.io/repo/**.
-Install **Privacy Monitor** from Sileo/Zebra to resolve the native app, engine,
-collector service, and Python dependency. See [distribution notes](distribution/README.md)
-for reproducible builds, compatibility limits, and release validation.
+Install Privacy Monitor from https://satyamsaxena1.github.io/repo/ in Sileo/Zebra.
+Version 1.2 replaces AI reviews and MCP with deterministic local rules. Today,
+Apps, and History use `/api/activity?hours=1|24|168`, refreshed every five seconds
+while visible. The monitor's own activity is excluded. Counts describe recorded
+API calls; they do not indicate safety or prove data transfer/capture succeeded.
 
-An optional [metadata-and-insight MCP connector](privacy-monitor-ai/README.md) lets a connected
-Claude/Codex client query activity summaries, recent metadata, and contacted domains.
-It omits raw clipboard/path/URL/credential details and never uploads activity by itself.
+See [native UI](native/README.md), [rules](docs/LOCAL_RULES.md), and
+[distribution](distribution/README.md). Old review records are no longer served;
+existing records expire under the same seven-day cleanup. MCP has been retired.
