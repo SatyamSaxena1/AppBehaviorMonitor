@@ -34,7 +34,7 @@ static UIStackView *Row(void) { UIStackView *v = [UIStackView new]; v.axis = UIL
 static UIImageView *Symbol(NSString *name, UIColor *color) {
     UIImageView *v = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:name]];
     v.contentMode = UIViewContentModeScaleAspectFit; v.tintColor = color; v.isAccessibilityElement = NO;
-    [v setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal]; [v.heightAnchor constraintEqualToConstant:28].active = YES; return v;
+    [v setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal]; [v.heightAnchor constraintEqualToConstant:28].active = YES; return v;
 }
 
 @interface PMRing : UIView
