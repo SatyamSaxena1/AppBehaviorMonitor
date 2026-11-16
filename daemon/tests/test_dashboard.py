@@ -112,6 +112,21 @@ class MonitorTests(unittest.TestCase):
         self.assertIn('My Planner', self.get('/'))
         self.assertIn('My Planner', self.get('/app/test.planner'))
 
+    def test_receiver_rejects_bad_packets_and_keeps_status_separate(self):
+        with patch.object(collector,'DB_PATH',str(Path(self.tmp.name)/'old.db')):
+            ingest=collector.Collector()
+        try:
+            for payload in [b'[]',b'null',b'bad',b'x'*4097,b'{"app":{},"cat":"network","act":"data_task"}']:
+                self.assertFalse(ingest.accept_packet(payload))
+            status=dict(ts=time.time(),pid=12,app='test.sandbox',name='Sandbox App',exe='Sandbox',cat='monitor',act='loaded')
+            self.assertTrue(ingest.accept_packet(json.dumps(status).encode()));ingest._flush()
+            activity=json.loads(self.get('/api/activity'))
+            app=next(a for a in activity['apps'] if a['app_id']=='test.sandbox')
+            self.assertEqual(app['count'],0);self.assertIsNone(app['latest_event'])
+            self.assertEqual(activity['total'],0)  # Existing fixture events are outside the window.
+            self.assertEqual(len(json.loads(self.get('/api/events'))),3)
+        finally:ingest.db.close()
+
     def test_search_name_friendly_action_and_no_match(self):
         self.assertIn('1 results', self.get('/search?q=My%20Planner'))
         self.assertIn('3 results', self.get('/search?q=Sent%20a%20request'))

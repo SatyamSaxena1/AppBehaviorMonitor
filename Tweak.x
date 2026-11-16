@@ -14,15 +14,24 @@
 #import <sys/un.h>
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
+#import <arpa/inet.h>
+#import <netdb.h>
+#import <errno.h>
+#import <stdatomic.h>
 
 #define SOCK_PATH "/var/jb/var/mobile/Documents/appmon/appmon.sock"
 #define MAX_MSG_SIZE 4096
 #define RATE_LIMIT_PER_SEC 100
+#define FALLBACK_PORT 8801
 
 // ─── Globals ─────────────────────────────────────────────
 
 static int g_sock = -1;
 static struct sockaddr_un g_addr;
+static int g_udpSock = -1;
+static struct sockaddr_in g_udpAddr;
+static _Thread_local BOOL g_sending = NO;
+static atomic_bool g_preferUDP;
 static NSString *g_appId = nil;
 static NSString *g_exeName = nil;
 static NSString *g_displayName = nil;
@@ -36,6 +45,13 @@ static dispatch_queue_t g_rateQueue;
 
 static void setupSocket(void) {
     g_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+    g_udpSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (g_udpSock >= 0) {
+        fcntl(g_udpSock, F_SETFL, fcntl(g_udpSock, F_GETFL, 0) | O_NONBLOCK);
+        memset(&g_udpAddr, 0, sizeof(g_udpAddr));
+        g_udpAddr.sin_len = sizeof(g_udpAddr); g_udpAddr.sin_family = AF_INET;
+        g_udpAddr.sin_port = htons(FALLBACK_PORT); inet_pton(AF_INET, "127.0.0.1", &g_udpAddr.sin_addr);
+    }
     if (g_sock < 0) return;
 
     // Non-blocking
@@ -67,8 +83,11 @@ static BOOL rateLimitOK(NSString *category) {
 }
 
 static void sendEvent(NSString *category, NSString *action, NSString *detail, NSDictionary *extra) {
-    if (g_sock < 0) return;
+    if ((g_sock < 0 && g_udpSock < 0) || g_sending) return;
     if (!rateLimitOK(category)) return;
+    int savedErrno = errno;
+    g_sending = YES;
+    @try {
 
     NSMutableDictionary *evt = [NSMutableDictionary dictionary];
     evt[@"ts"] = @([[NSDate date] timeIntervalSince1970]);
@@ -87,8 +106,14 @@ static void sendEvent(NSString *category, NSString *action, NSString *detail, NS
     NSData *json = [NSJSONSerialization dataWithJSONObject:evt options:0 error:nil];
     if (!json || json.length > MAX_MSG_SIZE) return;
 
-    sendto(g_sock, json.bytes, json.length, MSG_DONTWAIT,
-           (struct sockaddr *)&g_addr, sizeof(g_addr));
+    ssize_t sent = g_sock >= 0 && !atomic_load(&g_preferUDP) ? sendto(g_sock, json.bytes, json.length, MSG_DONTWAIT,
+           (struct sockaddr *)&g_addr, sizeof(g_addr)) : -1;
+    if (sent < 0 && (errno == EPERM || errno == EACCES)) atomic_store(&g_preferUDP,true);
+    if (sent < 0 && g_udpSock >= 0) {
+        sendto(g_udpSock, json.bytes, json.length, MSG_DONTWAIT,
+               (struct sockaddr *)&g_udpAddr, sizeof(g_udpAddr));
+    }
+    } @finally { g_sending = NO; errno = savedErrno; }
 }
 
 // ─── Network Hooks (NSURLSession) ────────────────────────
@@ -123,6 +148,41 @@ static NSString *requestSummary(NSURLRequest *req) {
 }
 
 %end
+
+// Socket coverage complements NSURLSession for apps using other network stacks.
+// These are API-call observations, not packet capture or successful-transfer proof.
+static void socketEvent(const struct sockaddr *address, socklen_t length, int result, int error, NSString *action) {
+    if (!address || g_sending) return;
+    char host[INET6_ADDRSTRLEN] = {0}; unsigned short port = 0;
+    if (address->sa_family == AF_INET && length >= sizeof(struct sockaddr_in)) {
+        const struct sockaddr_in *a = (const struct sockaddr_in *)address;
+        inet_ntop(AF_INET,&a->sin_addr,host,sizeof(host)); port = ntohs(a->sin_port);
+    } else if (address->sa_family == AF_INET6 && length >= sizeof(struct sockaddr_in6)) {
+        const struct sockaddr_in6 *a = (const struct sockaddr_in6 *)address;
+        inet_ntop(AF_INET6,&a->sin6_addr,host,sizeof(host)); port = ntohs(a->sin6_port);
+    } else return;
+    sendEvent(@"network",action,@"Socket connection attempt",@{@"host":@(host),@"port":@(port),@"result":@(result),@"errno":@(result<0 ? error : 0)});
+}
+static int (*original_connect)(int,const struct sockaddr *,socklen_t);
+static int monitor_connect(int fd,const struct sockaddr *address,socklen_t length) {
+    int result = original_connect(fd,address,length); int saved = errno;
+    socketEvent(address,length,result,saved,@"socket_connect"); errno = saved; return result;
+}
+static int (*original_connectx)(int,const sa_endpoints_t *,sae_associd_t,unsigned int,const struct iovec *,unsigned int,size_t *,sae_connid_t *);
+static int monitor_connectx(int fd,const sa_endpoints_t *endpoints,sae_associd_t assoc,unsigned int flags,const struct iovec *iov,unsigned int count,size_t *length,sae_connid_t *conn) {
+    int result = original_connectx(fd,endpoints,assoc,flags,iov,count,length,conn); int saved = errno;
+    if (endpoints) socketEvent(endpoints->sae_dstaddr,endpoints->sae_dstaddrlen,result,saved,@"socket_connectx");
+    errno = saved; return result;
+}
+static int (*original_getaddrinfo)(const char *,const char *,const struct addrinfo *,struct addrinfo **);
+static int monitor_getaddrinfo(const char *node,const char *service,const struct addrinfo *hints,struct addrinfo **addresses) {
+    int result = original_getaddrinfo(node,service,hints,addresses); int saved = errno;
+    if (node && !g_sending) {
+        NSString *host = [[NSString alloc] initWithBytes:node length:strnlen(node,254) encoding:NSUTF8StringEncoding];
+        if (host.length) sendEvent(@"network",@"dns_lookup",@"Hostname lookup",@{@"host":host,@"result":@(result)});
+    }
+    errno = saved; return result;
+}
 
 // ─── File System Hooks ───────────────────────────────────
 
@@ -359,6 +419,18 @@ static OSStatus hooked_SecItemDelete(CFDictionaryRef query) {
 
         // Socket
         setupSocket();
+
+        // Explicit instrumentation status is separate from observed activity.
+        sendEvent(@"monitor", @"loaded", nil, @{@"engine":@"1.2.0-beta3"});
+        [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:nil usingBlock:^(NSNotification *notification) {
+            sendEvent(@"monitor", @"loaded", nil, @{@"engine":@"1.2.0-beta3"});
+        }];
+        void *connectFn = dlsym(RTLD_DEFAULT,"connect");
+        if (connectFn) MSHookFunction(connectFn,(void *)monitor_connect,(void **)&original_connect);
+        void *connectxFn = dlsym(RTLD_DEFAULT,"connectx");
+        if (connectxFn) MSHookFunction(connectxFn,(void *)monitor_connectx,(void **)&original_connectx);
+        void *dnsFn = dlsym(RTLD_DEFAULT,"getaddrinfo");
+        if (dnsFn) MSHookFunction(dnsFn,(void *)monitor_getaddrinfo,(void **)&original_getaddrinfo);
 
         // Hook keychain C functions
         MSHookFunction((void *)SecItemCopyMatching, (void *)hooked_SecItemCopyMatching, (void **)&orig_SecItemCopyMatching);

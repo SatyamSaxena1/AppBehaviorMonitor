@@ -4,7 +4,7 @@ import argparse, datetime, email.utils, gzip, hashlib, json, os, plistlib, shuti
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.2.0~beta2'
+VERSION = '1.2.0~beta3'
 URL = 'https://satyamsaxena1.github.io/repo/'
 ENV = dict(os.environ, PATH='/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/usr/sbin:/usr/bin:/bin', LC_ALL='C')
 DPKG = '/var/jb/usr/bin/dpkg-deb'
@@ -39,7 +39,7 @@ def build(output):
     infofile = native/'var/jb/Applications/PrivacyMonitor.app/Info.plist'
     info = plistlib.loads(infofile.read_bytes())
     info['CFBundleShortVersionString'] = '1.2.0'
-    info['CFBundleVersion'] = '7'
+    info['CFBundleVersion'] = '8'
     infofile.write_bytes(plistlib.dumps(info))
     # Info.plist is part of the signed app; re-sign after changing it.
     run('/var/jb/usr/bin/ldid', '-S', infofile.parent/'PrivacyMonitor')

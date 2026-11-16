@@ -52,3 +52,7 @@ combinations remain unverified; source compatibility is not a claim of testing.
 
 Version 1.2 retires MCP. The old launcher is replaced with a disabled stub during upgrades.
 Local summaries use activity_rules.py and /api/activity; no AI account is needed.
+
+Beta3 collector also receives sandboxed-app datagrams only on 127.0.0.1:8801.
+APPMON_UDP_PORT is an isolated-test override; the installed engine targets 8801.
+Update collector and engine together, then fully close/reopen monitored apps.

@@ -212,7 +212,8 @@ static UIImageView *Symbol(NSString *name, UIColor *color) {
         UIStackView *card = [self card]; UIStackView *row = Row(); [row addArrangedSubview:Symbol(@"app.fill",Accent())];
         [row addArrangedSubview:Text(app[@"name"],UIFontTextStyleHeadline,UIColor.labelColor)];
         UILabel *count = Text(Count(self.signalID ? app[@"signals"][self.signalID] : app[@"count"]),UIFontTextStyleTitle2,UIColor.labelColor); count.textAlignment = NSTextAlignmentRight; [row addArrangedSubview:count]; [card addArrangedSubview:row];
-        [card addArrangedSubview:Text(Age(app[@"latest_event"]),UIFontTextStyleCaption1,UIColor.secondaryLabelColor)];
+        NSString *status = [app[@"count"] integerValue] ? Age(app[@"latest_event"]) : app[@"engine_seen_at"] ? [NSString stringWithFormat:@"Engine seen %@ · no recorded calls",Age(app[@"engine_seen_at"])] : @"No recorded calls";
+        [card addArrangedSubview:Text(status,UIFontTextStyleCaption1,UIColor.secondaryLabelColor)];
         [self categories:app[@"categories"] in:card];
         __weak typeof(self) weakSelf = self;
         [self button:@"Explore  ›" in:card action:^{ PMCardsController *detail = [PMCardsController new]; detail.appID = app[@"app_id"]; detail.appName = app[@"name"]; detail.hours = weakSelf.hours; [weakSelf.navigationController pushViewController:detail animated:YES]; }];

@@ -2,7 +2,7 @@
 import time
 
 CATEGORIES = {
-    'network': ('Connections', 'network'), 'file': ('Files', 'folder.fill'),
+    'network': ('Network calls', 'network'), 'file': ('Files', 'folder.fill'),
     'keychain': ('Credentials', 'key.fill'), 'clipboard': ('Clipboard', 'doc.on.clipboard'),
     'location': ('Location', 'location.fill'), 'camera': ('Camera', 'camera.fill'),
     'mic': ('Microphone', 'mic.fill'), 'tracking': ('Identifiers', 'person.crop.square'),
@@ -41,6 +41,14 @@ def summarize(db, hours=24, app_id=None, now=None):
     for app, entry in apps.items():
         named = db.execute("SELECT display_name,exe_name FROM events WHERE "+where+" AND app_id = ? ORDER BY (display_name IS NOT NULL AND display_name != '') DESC, timestamp DESC,id DESC LIMIT 1", params+[app]).fetchone()
         entry['name'] = (named[0] or named[1] or app) if named else app
+    observed_count = len(apps)
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='monitoring_status'").fetchone():
+        status_where = "seen_at>=? AND seen_at<=? AND app_id!='com.appmon.native'"
+        status_params = [start,now]
+        if app_id: status_where += ' AND app_id=?'; status_params.append(app_id)
+        for app,pid,exe,name,seen in db.execute('SELECT app_id,pid,exe_name,display_name,seen_at FROM monitoring_status WHERE '+status_where,status_params):
+            entry = apps.setdefault(app,dict(app_id=app,name=name or exe or app,count=0,latest_event=None,categories={},signals={r[0]:0 for r in RULES}))
+            entry['engine_seen_at'] = seen
     def cats(values):
         return [dict(id=k, title=CATEGORIES.get(k, ('Other','circle.grid.2x2'))[0], symbol=CATEGORIES.get(k, ('Other','circle.grid.2x2'))[1], count=v) for k,v in sorted(values.items(), key=lambda x:(-x[1],x[0]))]
     app_list = sorted(apps.values(), key=lambda a:(-a['count'],a['app_id']))
@@ -53,9 +61,9 @@ def summarize(db, hours=24, app_id=None, now=None):
     for bucket, count in db.execute('SELECT CAST((timestamp - ?) / ? AS INTEGER),COUNT(*) FROM events WHERE '+where+' GROUP BY 1', [start,step]+params):
         history[min(buckets-1,max(0,bucket))]['count'] += count
     all_where = "app_id != 'com.appmon.native'" + (' AND app_id = ?' if app_id else '')
-    last = db.execute('SELECT MAX(timestamp) FROM events WHERE '+all_where, [app_id] if app_id else []).fetchone()[0]
+    last = db.execute('SELECT MAX(timestamp) FROM events WHERE '+all_where+' AND timestamp<=?', ([app_id] if app_id else [])+[now]).fetchone()[0]
     return dict(generated_at=now, period_start=start, period_end=now, hours=hours,
-                total=total, app_count=len(app_list), latest_event=last, categories=cats(categories),
+                total=total, app_count=observed_count, latest_event=last, categories=cats(categories),
                 apps=app_list, history=history,
                 signals=[dict(id=k,title=t,symbol=s,count=rule_counts[k]) for k,t,s,_,_ in RULES],
                 rules_version=1, excludes_monitor=True)

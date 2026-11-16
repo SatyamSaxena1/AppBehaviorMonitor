@@ -22,6 +22,7 @@ static NSString *Action(NSDictionary *row) {
         @"start_updating": @"Started location updates", @"start_significant": @"Started location monitoring",
         @"req_when_in_use": @"Requested location access", @"req_always": @"Requested background location",
         @"capture_start": @"Started capture", @"request_access": @"Requested permission",
+        @"socket_connect": @"Attempted a socket connection", @"socket_connectx": @"Attempted a socket connection", @"dns_lookup": @"Looked up a hostname",
         @"identifierForVendor": @"Read device identifier", @"advertisingIdentifier": @"Read advertising identifier",
         @"req_att_authorization": @"Requested tracking permission", @"check_att_status": @"Checked tracking permission"};
     NSString *action = row[@"action"] ?: @"Activity";

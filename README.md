@@ -8,9 +8,9 @@ System-wide app behavior monitor for jailbroken iOS (Dopamine, rootless). Hooks 
 ┌─ Every app process ──────────────────────────┐
 │  AppBehaviorMonitor.dylib (MobileSubstrate)  │
 │  - Logos ObjC hooks + MSHookFunction for C   │
-│  - Sends events via Unix datagram socket     │
+│  - Sends events via local datagrams     │
 └──────────────┬───────────────────────────────┘
-               │ Unix datagram socket (fire+forget)
+               │ Unix / localhost UDP (fire+forget)
                ▼
 ┌─ Python 3.14 daemon ────────────────────────┐
 │  collector.py + dashboard.py                 │
@@ -23,7 +23,7 @@ System-wide app behavior monitor for jailbroken iOS (Dopamine, rootless). Hooks 
 
 | Category | Hooks |
 |----------|-------|
-| Network | `NSURLSession` data/upload/download tasks |
+| Network | `NSURLSession` tasks, socket connection attempts, and hostname lookups |
 | File | `NSFileManager` read/write/delete/copy (sensitive paths only) |
 | Keychain | `SecItemCopyMatching`, `SecItemAdd`, `SecItemUpdate`, `SecItemDelete` |
 | Clipboard | `UIPasteboard` get/set string, strings, image |
@@ -108,3 +108,5 @@ API calls; they do not indicate safety or prove data transfer/capture succeeded.
 See [native UI](native/README.md), [rules](docs/LOCAL_RULES.md), and
 [distribution](distribution/README.md). Old review records are no longer served;
 existing records expire under the same seven-day cleanup. MCP has been retired.
+
+Sandboxed apps: beta3 falls back from Unix IPC to UDP on 127.0.0.1:8801. Fully close/reopen monitored apps after updating the engine. Instrumentation status appears separately from actual activity; an engine-seen timestamp does not prove complete monitoring coverage.

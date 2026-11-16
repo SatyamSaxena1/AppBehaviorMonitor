@@ -6,6 +6,7 @@ Listens on Unix datagram socket, writes to SQLite, runs cleanup.
 
 import json
 import logging
+import math
 import os
 import signal
 import socket
@@ -57,6 +58,10 @@ def init_db(db_path: str) -> sqlite3.Connection:
         CREATE INDEX IF NOT EXISTS idx_events_cat ON events(category, timestamp);
         CREATE INDEX IF NOT EXISTS idx_events_ts ON events(timestamp);
 
+        CREATE TABLE IF NOT EXISTS monitoring_status (
+            app_id TEXT PRIMARY KEY, pid INTEGER NOT NULL, exe_name TEXT,
+            display_name TEXT, seen_at REAL NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT);
 
         CREATE TABLE IF NOT EXISTS app_summary (
@@ -82,6 +87,7 @@ class Collector:
         self.db = init_db(DB_PATH)
         self.db_lock = threading.Lock()
         self.sock = None
+        self.udp_sock = None
         self._batch = []
         self._batch_lock = threading.Lock()
 
@@ -94,20 +100,45 @@ class Collector:
         self.sock.settimeout(1.0)
         log.info("Listening on %s", SOCK_PATH)
 
-    def receive_loop(self):
+    def setup_udp(self):
+        self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self.udp_sock.bind(('127.0.0.1', int(os.environ.get('APPMON_UDP_PORT', '8801'))))
+            self.udp_sock.settimeout(1.0)
+            log.info('Sandboxed-app receiver at 127.0.0.1:%d', self.udp_sock.getsockname()[1])
+        except OSError:
+            self.udp_sock.close(); self.udp_sock = None
+            raise
+
+    def accept_packet(self, data):
+        if len(data) > MAX_MSG:
+            return False
+        try:
+            evt = json.loads(data)
+            if not isinstance(evt, dict): return False
+            for key, maximum in [('app',255),('exe',255),('name',255),('cat',40),('act',80),('detail',2048),('extra',2048)]:
+                if key in evt and evt[key] is not None and (not isinstance(evt[key],str) or len(evt[key])>maximum): return False
+            if not evt.get('app') or not evt.get('cat') or not evt.get('act'): return False
+            if 'pid' in evt and (type(evt['pid']) is not int or not 0<=evt['pid']<=2**31-1): return False
+            stamp = evt.get('ts',time.time())
+            if isinstance(stamp,bool) or not isinstance(stamp,(int,float)) or not math.isfinite(stamp) or not 0<=stamp<=time.time()+300: return False
+            with self._batch_lock:
+                if len(self._batch)>=10000:return False
+                self._batch.append(evt)
+            return True
+        except (ValueError,UnicodeError):
+            return False
+
+    def receive_loop(self, receiver=None):
+        receiver = receiver or self.sock
         while self.running:
             try:
-                data = self.sock.recv(MAX_MSG)
-                evt = json.loads(data)
-                with self._batch_lock:
-                    self._batch.append(evt)
+                self.accept_packet(receiver.recv(MAX_MSG+1))
             except socket.timeout:
-                continue
-            except json.JSONDecodeError:
                 continue
             except Exception as e:
                 if self.running:
-                    log.error("recv error: %s", e)
+                    log.error('recv error: %s',e)
 
     def flush_loop(self):
         """Flush batched events to SQLite every 0.5s."""
@@ -124,6 +155,7 @@ class Collector:
 
         rows = []
         summary_updates = {}
+        status_updates = []
         for evt in batch:
             ts = evt.get("ts", time.time())
             pid = evt.get("pid", 0)
@@ -134,6 +166,9 @@ class Collector:
             act = evt.get("act", "unknown")
             detail = evt.get("detail")
             extra = evt.get("extra")
+            if cat == 'monitor':
+                if act == 'loaded': status_updates.append((app,pid,exe,name,ts))
+                continue
             rows.append((ts, pid, app, exe, name, cat, act, detail, extra))
 
             hour = time.strftime("%Y-%m-%d-%H", time.gmtime(ts))
@@ -142,6 +177,10 @@ class Collector:
 
         with self.db_lock:
             try:
+                self.db.executemany(
+                    "INSERT INTO monitoring_status(app_id,pid,exe_name,display_name,seen_at) VALUES(?,?,?,?,?) "
+                    "ON CONFLICT(app_id) DO UPDATE SET pid=excluded.pid,exe_name=excluded.exe_name,display_name=excluded.display_name,seen_at=excluded.seen_at "
+                    "WHERE excluded.seen_at>=monitoring_status.seen_at",status_updates)
                 self.db.executemany(
                     "INSERT INTO events (timestamp, pid, app_id, exe_name, display_name, category, action, detail, extra_json) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -170,6 +209,7 @@ class Collector:
                 # Retain the old table only for migration/retention; it is no longer served.
                 if self.db.execute("SELECT 1 FROM sqlite_master WHERE name='ai_insights' AND type='table'").fetchone():
                     self.db.execute("DELETE FROM ai_insights WHERE created_at < ?", (cutoff,))
+                self.db.execute("DELETE FROM monitoring_status WHERE seen_at < ?",(cutoff,))
                 cur = self.db.execute("DELETE FROM events WHERE timestamp < ?", (cutoff,))
                 deleted = cur.rowcount
                 cutoff_hour = time.strftime("%Y-%m-%d-%H", time.gmtime(cutoff))
@@ -189,6 +229,8 @@ class Collector:
         self._flush()
         if self.sock:
             self.sock.close()
+        if self.udp_sock:
+            self.udp_sock.close()
         if os.path.exists(SOCK_PATH):
             os.unlink(SOCK_PATH)
         self.db.close()
@@ -198,9 +240,11 @@ class Collector:
         signal.signal(signal.SIGINT, self.stop)
 
         self.setup_socket()
+        self.setup_udp()
 
         threads = [
             threading.Thread(target=self.receive_loop, daemon=True),
+            threading.Thread(target=self.receive_loop, args=(self.udp_sock,), daemon=True),
             threading.Thread(target=self.flush_loop, daemon=True),
             threading.Thread(target=self.cleanup_loop, daemon=True),
         ]

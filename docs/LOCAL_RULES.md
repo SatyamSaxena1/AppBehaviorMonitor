@@ -30,3 +30,15 @@ review table is not served/created; older records age out via legacy retention.
 The source-path launcher also fails for stale CLI registrations. Local privacy-monitor
 entries are removed from Claude/Codex config; restart clients to drop cached tools.
 Previous release artifacts/source remain in Git history. No data database is committed.
+
+## Sandboxed app delivery — beta3
+
+Instagram investigation: installed beta2, engine mapped in the live process, Choicy injection enabled, zero recorded Instagram events. Read-only sandbox_check for Instagram returned network-outbound denied (1/errno 0) for the Unix socket path, versus allowed (0) for the diagnostic process; file-write-data was allowed. Only jailbreak/unsandboxed apps had recorded activity. No private app files/content were inspected. Socket enumeration showed active network connections, without capturing their payload.
+
+Engine now uses nonblocking IPv4 UDP to 127.0.0.1:8801 when Unix delivery fails; permission-denied failures select the fallback for the process lifetime. It preserves errno, avoids sender recursion, and retains the existing rate limits. Collector binds only loopback, accepts bounded JSON objects, rejects malformed/oversized input, and caps pending batches. Both IPC transports are best-effort local telemetry, not authenticated evidence; any local process able to send to them can spoof metadata. No listener is bound to external interfaces.
+
+Network coverage additionally includes connect/connectx attempts (IP/port/result) and getaddrinfo lookups (host/result). Counts are API-call observations and can overlap at multiple layers; they are not unique requests, packets, successful transmissions, or proof of tracking. Custom direct syscalls/other stacks can still bypass hooks.
+
+Constructor/foreground sends monitor/loaded metadata, stored only in monitoring_status with seven-day retention. Apps can show engine-seen with zero recorded calls; it is not a fake activity event or a claim the process is currently running. Actual app_count/total/category/history aggregates exclude status. Last-event query now excludes future timestamps consistently.
+
+Checks: 15 backend tests, isolated Unix+UDP packaged collector smoke with malformed datagrams and separate status, native IPC harness compiled from actual Tweak.x source (simulated Unix EPERM -> real UDP, cached fallback, errno preservation, recursion guard), full native/engine build and package validation. New Instagram behavior requires installing beta3 and restarting Instagram; not yet verified in Instagram itself.
